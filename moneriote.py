@@ -54,6 +54,17 @@ def get_blockchain_height():
     Gets the last known peers from the server
 '''
 def load_nodes():
+
+    global currentNodes
+
+    try:
+        cn = open( 'current_nodes', 'r')        # read last nodes list from file
+        currentNodes = json.loads(cn.read())
+        cn.close()
+        print('Loaded '+str(currentNodes.__len__())+ ' nodes in current_nodes.')
+    except (OSError, IOError) as e:
+        print('File current_nodes was not found, will create new.')
+
     nodes = []
     process = Popen([
         monerodLocation,
@@ -75,7 +86,7 @@ def load_nodes():
 
             if address not in currentNodes and address != '0.0.0.0':
                 nodes.append(address)
-    print('All peers from RPC: ' + str(len(nodes)) + ' nodes')
+    print('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
     return nodes
 
 
@@ -109,6 +120,8 @@ def scan_node(accepted_height, address):
 """
 def start_scanning_threads(current_nodes, blockchain_height):
 
+    global currentNodes
+
     print('Scanning port '+ str(rpcPort) +' online & synced (height '+str(blockchain_height)+') nodes...')
 
     pool = Pool(processes=maximumConcurrentScans)
@@ -126,6 +139,12 @@ def start_scanning_threads(current_nodes, blockchain_height):
     
     print( 'After screening: ' + str(len(currentNodes)) + ' nodes')
 
+    try:
+        cn = open('current_nodes', 'w')
+        cn.write(json.dumps(currentNodes))
+        cn.close()
+    except (OSError, IOError) as e:
+        print('Write current_nodes file error:'+e)
     
 """
     Update our dns records
@@ -197,7 +216,7 @@ def check_all_nodes():
     #     print ('Checking existing nodes...')
     #     start_scanning_threads(currentNodes, get_blockchain_height())
     
-    print('\nGetting peers from monero RPC...')     # look for new nodes from daemon
+    print('\nGetting peers...')     # look for new nodes from daemon
     start_scanning_threads(load_nodes(), get_blockchain_height())
     
     print ('Building DNS records...')           # Build DNS records
