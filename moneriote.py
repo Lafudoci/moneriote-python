@@ -55,16 +55,6 @@ def get_blockchain_height():
 '''
 def load_nodes():
 
-    global currentNodes
-
-    try:
-        cn = open( 'current_nodes', 'r')        # read last nodes list from file
-        currentNodes = json.loads(cn.read())
-        cn.close()
-        print('Loaded '+str(currentNodes.__len__())+ ' nodes in current_nodes.')
-    except (OSError, IOError) as e:
-        print('File current_nodes was not found, will create new.')
-
     nodes = []
     process = Popen([
         monerodLocation,
@@ -212,9 +202,20 @@ def update_dns_records():
 
 
 def check_all_nodes():
-    # if currentNodes.__len__() > 0:              # scan current existing nodes
-    #     print ('Checking existing nodes...')
-    #     start_scanning_threads(currentNodes, get_blockchain_height())
+
+    global currentNodes
+
+    try:
+        cn = open( 'current_nodes', 'r')        # read last nodes list from file
+        currentNodes = json.loads(cn.read())
+        cn.close()
+        print('Loaded '+str(currentNodes.__len__())+ ' nodes in current_nodes.')
+    except (OSError, IOError) as e:
+        print('File current_nodes was not found, will create new.')
+
+    if currentNodes.__len__() > 0:              # scan current existing nodes
+        print ('Checking existing nodes...')
+        start_scanning_threads(currentNodes, get_blockchain_height())
     
     print('\nGetting peers...')     # look for new nodes from daemon
     start_scanning_threads(load_nodes(), get_blockchain_height())
