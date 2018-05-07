@@ -140,11 +140,11 @@ def start_scanning_threads(current_nodes, blockchain_height):
     Update our dns records
 """
 def update_dns_records():
-    if currentNodes.__len__() > 5:
-        random_record = random.sample(currentNodes, 5)     # random pick 5 records
-        print('Random pick 5 IP for DNS records')
+    if currentNodes.__len__() > 3:
+        random_record = random.sample(currentNodes, 3)     # random pick 3 records
+        print('Random pick 3 IP for DNS records')
     else:
-        random_record = currentNodes    # if less than 5 then use all records
+        random_record = currentNodes    # if less than 3 then use all records
         print('Use all IP for DNS records')
 
     print('Start building records')
