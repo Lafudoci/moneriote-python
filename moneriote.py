@@ -14,6 +14,8 @@ moneroDaemonAddr = config.get('MoneroRPC', 'moneroDaemonAddr')  # The IP address
 moneroDaemonPort = config.get('MoneroRPC', 'moneroDaemonPort')  # The port address that the rpc server is listening on
 moneroDaemonAuth = config.get('MoneroRPC', 'moneroDaemonAuth')  # The username:password that the rpc server requires (if set) - has to be something
 
+useXMRchianAsRef = config.get('MoneroRPC', 'useXMRchianAsRef')  # If sets true, the script will use xmrchain block height when daemon height is lagging
+
 doaminName = config.get('cloudflareAPI', 'doaminName')
 dnsApiZone = config.get('cloudflareAPI', 'dnsApiZone')
 dnsApiKey = config.get('cloudflareAPI', 'dnsApiKey')
@@ -38,6 +40,11 @@ dns_record = {}               # store current DNS record
     Gets the current top block on the chain
 '''
 def get_blockchain_height():
+
+    daemon_height = 0
+    ref_height = 0
+
+    # Gets height from daemon
     process = Popen([
         monerodLocation,
         '--rpc-bind-ip', moneroDaemonAddr,
@@ -47,8 +54,56 @@ def get_blockchain_height():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         universal_newlines=True, bufsize=1)
     (output, err) = process.communicate()
-    height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
-    return height
+    if output.startswith('Error'):
+        print(output)
+        daemon_height = 0
+    else:
+        daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
+        print('Daemon height is '+ str(daemon_height))
+
+    # Gets height from xmrchain
+    if useXMRchianAsRef == 'True':
+        while True: 
+            try:
+                resp = requests.get(url = 'https://xmrchain.net/api/networkinfo', timeout = 20)
+            except requests.exceptions.RequestException as err:
+                print(' ERROR: '+ str(err))
+                print(' Retry in 10s ...\n')
+                time.sleep(10)
+                continue
+            
+            if str(resp) == '<Response [200]>':
+                try:
+                    jsontext = json.loads(resp.text)
+                except ValueError:
+                    print ('Decoding xmrchain JSON has failed')
+                    continue
+            
+                if jsontext['status'] == 'success':
+                    break
+                else:
+                    print(' ERROR:'+ jsontext['status'])
+                    print(' Retry in 10s ...\n')
+                    time.sleep(10)
+                    continue
+            else:
+                print(' Retry in 10s ...\n')
+                time.sleep(10)
+                continue
+
+        ref_height = int(jsontext['data']['height'])
+        print('xmrchain height is '+ str(ref_height))
+
+        # Compare block height
+        if (ref_height > daemon_height):
+            print('Xmrchain height is higher. Daemon might be lagging.')
+            return ref_height
+
+        else:
+            return daemon_height
+
+    else: return daemon_height
+    
 
 '''
     Gets the last known peers from the server
@@ -217,7 +272,7 @@ def check_all_nodes():
         print ('Checking existing nodes...')
         start_scanning_threads(currentNodes, get_blockchain_height())
     
-    print('\nGetting peers...')     # look for new nodes from daemon
+    print('\nGetting new peers...')     # look for new nodes from daemon
     start_scanning_threads(load_nodes(), get_blockchain_height())
     
     print ('Building DNS records...')           # Build DNS records
