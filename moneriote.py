@@ -1,10 +1,9 @@
 from functools import partial
 from multiprocessing import Pool, freeze_support
 from subprocess import Popen
-from time import sleep
 from datetime import datetime
 
-import json, re, requests, subprocess, random, configparser
+import json, re, requests, subprocess, random, configparser, time
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -63,12 +62,13 @@ def get_blockchain_height():
 
     # Gets height from xmrchain
     if useXMRchianAsRef == 'True':
-        while True: 
+        i = 1
+        while True:
             try:
                 resp = requests.get(url = 'https://xmrchain.net/api/networkinfo', timeout = 20)
             except requests.exceptions.RequestException as err:
                 print(' ERROR: '+ str(err))
-                print(' Retry in 10s ...\n')
+                print(' Retry in 10s ...')
                 time.sleep(10)
                 continue
             
@@ -80,25 +80,33 @@ def get_blockchain_height():
                     continue
             
                 if jsontext['status'] == 'success':
+                    ref_height = int(jsontext['data']['height'])
                     break
                 else:
                     print(' ERROR:'+ jsontext['status'])
-                    print(' Retry in 10s ...\n')
+                    print(' Retry in 10s ...')
                     time.sleep(10)
                     continue
             else:
-                print(' Retry in 10s ...\n')
+                print(str(resp))
+                print(' Retry in 10s ...')
                 time.sleep(10)
+                if i > 5:
+                    print('Xmrchain is not available now, skipping.')
+                    ref_height = -1
+                    break
+                i += 1
                 continue
 
-        ref_height = int(jsontext['data']['height'])
         print('xmrchain height is '+ str(ref_height))
 
         # Compare block height
         if (ref_height > daemon_height):
             print('Xmrchain height is higher. Daemon might be lagging.')
             return ref_height
-
+        elif (ref_height == -1):
+            print('Xmrchain is not available now. Use daemon height')
+            return daemon_height
         else:
             return daemon_height
 
@@ -291,5 +299,5 @@ if __name__ == '__main__':
     freeze_support()
     while True:
         check_all_nodes()
-        sleep(scanInterval * 60)
+        time.sleep(scanInterval * 60)
     
