@@ -36,7 +36,10 @@ class Moneriote:
         self._maximumConcurrentScans = 16  # How many servers we should scan at once
         self._acceptableBlockOffset = 3  # How much variance in the block height will be allowed
         self._scanInterval = 10  # N Minutes
-        self._rpcPort = 18089  # This is the rpc server port that we'll check for
+
+        # Default Monero RPC port
+        self._m_rpc_port = 18089
+
         self._currentNodes = []  # store current usable opennodes
         self._dns_record = {}  # store current DNS record
 
@@ -60,13 +63,8 @@ class Moneriote:
     def cf_dns_api_url(self):
         return 'https://api.cloudflare.com/client/v4/zones/%s/dns_records/' % self.cf_dns_api_zone
 
-    def blockchain_height(self):
-        """
-        Gets the current top block on the chain
-        :return: daemon height as int
-        """
-        daemon_height = None
-        ref_height = None
+    def _daemon_command(self, cmd: str):
+        Moneriote.log_msg("spawning daemon; executing command \'%s\'" % cmd)
 
         # build proc args
         args = [
@@ -75,14 +73,31 @@ class Moneriote:
         ]
         if self.md_daemon_auth:
             args.extend(['--rpc-login', self.md_daemon_auth])
-        args.append('print_height')
+        args.append(cmd)
 
-        # execute proc
         process = Popen([self.md_path, *args],
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         universal_newlines=True, bufsize=1)
-        (output, err) = process.communicate()
+        output, err = process.communicate(timeout=10)
         output = output.decode('utf8')
+
+        # cleanup proc
+        try:
+            process.kill()
+            process.communicate()
+        except:
+            pass
+        return output
+
+    def blockchain_height(self):
+        """
+        Gets the current top block on the chain
+        :return: daemon height as int
+        """
+        daemon_height = None
+        ref_height = None
+
+        output = self._daemon_command(cmd="print_height")
 
         if output.startswith('Error'):
             Moneriote.log_err(output)
@@ -98,14 +113,13 @@ class Moneriote:
             while True:
                 if retries > max_retries:
                     Moneriote.log_err('xmrchain is not available now. Using daemon height...')
-
                 try:
                     resp = requests.get(url='https://xmrchain.net/api/networkinfo', timeout=20)
                     resp.raise_for_status()  # raise on non-200 status
                     blob = json.loads(resp.text)
                 except Exception as ex:
                     Moneriote.log_err('Fetching xmrchain JSON has failed')
-                    Moneriote.log_err(str(err))
+                    Moneriote.log_err(str(ex))
                     Moneriote.log_err('Retry in 10s ...')
                     retries += 1
                     time.sleep(10)
@@ -132,6 +146,49 @@ class Moneriote:
                 Moneriote.log_err('xmrchain is not available now. Using daemon height.')
         return daemon_height
 
+    def load_nodes(self):
+        """Gets the last known peers from the server"""
+        nodes = []
+        output = self._daemon_command("print_pl")
+
+        regex = r"(gray|white)\s+(\w+)\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})"
+        matches = re.finditer(regex, output)
+
+        for i, match in enumerate(matches):
+            if match.group(1) == 'white':
+                address = match.group(3)
+                if address not in currentNodes and address != '0.0.0.0':
+                    nodes.append(address)
+
+        Moneriote.log_msg('Got peers from RPC: %d nodes' % len(nodes))
+        return nodes
+
+    def scan_node(self, accepted_height, address):
+        """
+        Scans the requested address to see if the RPC port is available and is within the accepted range
+        :param accepted_height:
+        :param address:
+        :return:
+        """
+        url = 'http://%s:%d/getheight' % (address, self._m_rpc_port)
+
+        try:
+            resp = requests.get(url, timeout=3)
+            resp.raise_for_status()
+            blob = json.loads(resp.text)
+            assert blob.get('height', '').isdigit()
+            height = int(blob.get('height'))
+            block_height_diff = height - accepted_height
+
+            # Check if the node we're checking is up to date (with a little buffer)
+            if self._acceptableBlockOffset >= block_height_diff >= (self._acceptableBlockOffset * -1):
+                return {'address': address, 'valid': True}
+        except ValueError as ex:
+            Moneriote.log_err("Could not validate JSON for RPC \'%s\': %s" % (url, str(ex)))
+        except requests.exceptions.RequestException:
+            Moneriote.log_err('Scan node: \'%s\': failed' % url)
+        return {'address': address, 'valid': False}
+
     @staticmethod
     def log_err(msg):
         now = datetime.now()
@@ -143,64 +200,8 @@ class Moneriote:
         print('\033[92m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
 
 
-def load_nodes():
-    """Gets the last known peers from the server"""
-
-    nodes = []
-    process = Popen([
-        monerodLocation,
-        '--rpc-bind-ip', moneroDaemonAddr,
-        '--rpc-bind-port', moneroDaemonPort,
-        '--rpc-login', moneroDaemonAuth,
-        'print_pl'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        universal_newlines=True, bufsize=1)
-    (output, err) = process.communicate()
-
-    regex = r"(gray|white)\s+(\w+)\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})"
-    matches = re.finditer(regex, output)
-
-    for matchNum, match in enumerate(matches):
-        if match.group(1) == 'white':
-            address = match.group(3)
-
-            if address not in currentNodes and address != '0.0.0.0':
-                nodes.append(address)
-    log_msg('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
-    return nodes
-
-
-"""
-    Scans the requested address to see if the RPC port is available and is within the accepted range
-"""
-
-
-def scan_node(accepted_height, address):
-    try:
-        req = requests.get('http://' + address + ':' + rpcPort.__str__() + '/getheight', timeout=3)
-    except requests.exceptions.RequestException:
-        return {'address': address, 'valid': False}
-
-    try:
-        node_height_json = json.loads(req.text)
-    except:
-        return {'address': address, 'valid': False}
-
-    block_height_diff = int(node_height_json['height']) - accepted_height
-
-    # Check if the node we're checking is up to date (with a little buffer)
-    if acceptableBlockOffset >= block_height_diff >= (acceptableBlockOffset * -1):
-        return {'address': address, 'valid': True}
-    else:
-        return {'address': address, 'valid': False}
-
-
-"""
-    Start threads checking known nodes to see if they're alive
-"""
-
-
 def start_scanning_threads(current_nodes, blockchain_height):
+    """Start threads checking known nodes to see if they're alive."""
     global currentNodes
 
     log_msg('Scanning port ' + str(rpcPort) + ' online & synced (height ' + str(blockchain_height) + ') nodes...')
