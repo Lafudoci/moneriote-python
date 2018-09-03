@@ -1,3 +1,4 @@
+#!/usr/bin/python3.5
 from functools import partial
 from multiprocessing import Pool, freeze_support
 from subprocess import Popen
@@ -32,6 +33,13 @@ class Moneriote:
             'X-Auth-Key': self.cf_dns_api_key
         }
 
+        self._maximumConcurrentScans = 16  # How many servers we should scan at once
+        self._acceptableBlockOffset = 3  # How much variance in the block height will be allowed
+        self._scanInterval = 10  # N Minutes
+        self._rpcPort = 18089  # This is the rpc server port that we'll check for
+        self._currentNodes = []  # store current usable opennodes
+        self._dns_record = {}  # store current DNS record
+
     @classmethod
     def from_config(cls):
         config = configparser.ConfigParser()
@@ -52,116 +60,92 @@ class Moneriote:
     def cf_dns_api_url(self):
         return 'https://api.cloudflare.com/client/v4/zones/%s/dns_records/' % self.cf_dns_api_zone
 
+    def blockchain_height(self):
+        """
+        Gets the current top block on the chain
+        :return: daemon height as int
+        """
+        daemon_height = None
+        ref_height = None
 
-Moneriote.from_config()
+        # build proc args
+        args = [
+            '--rpc-bind-ip', self.md_daemon_addr,
+            '--rpc-bind-port', self.md_daemon_port,
+        ]
+        if self.md_daemon_auth:
+            args.extend(['--rpc-login', self.md_daemon_auth])
+        args.append('print_height')
 
+        # execute proc
+        process = Popen([self.md_path, *args],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        universal_newlines=True, bufsize=1)
+        (output, err) = process.communicate()
+        output = output.decode('utf8')
 
-maximumConcurrentScans = 16  # How many servers we should scan at once
-acceptableBlockOffset = 3  # How much variance in the block height will be allowed
-scanInterval = 10  # N Minutes
-rpcPort = 18089  # This is the rpc server port that we'll check for
-currentNodes = []  # store current usable opennodes
-dns_record = {}  # store current DNS record
+        if output.startswith('Error'):
+            Moneriote.log_err(output)
+        else:
+            daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
+            Moneriote.log_msg('Daemon height is %d' % daemon_height)
 
+        # Gets height from xmrchain
+        if self.md_use_xmr_chain_as_ref:
+            max_retries = 5
+            retries = 0
 
-def log_err(msg):
-    now = datetime.now()
-    print('\033[91m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
+            while True:
+                if retries > max_retries:
+                    Moneriote.log_err('xmrchain is not available now. Using daemon height...')
 
-
-def log_msg(msg):
-    now = datetime.now()
-    print('\033[92m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
-
-
-log_err("testing")
-
-'''
-    Gets the current top block on the chain
-'''
-
-
-def get_blockchain_height():
-    daemon_height = 0
-    ref_height = 0
-
-    # Gets height from daemon
-    process = Popen([
-        monerodLocation,
-        '--rpc-bind-ip', moneroDaemonAddr,
-        '--rpc-bind-port', moneroDaemonPort,
-        '--rpc-login', moneroDaemonAuth,
-        'print_height'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        universal_newlines=True, bufsize=1)
-    (output, err) = process.communicate()
-    if output.startswith('Error'):
-        log_msg(output)
-        daemon_height = 0
-    else:
-        daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
-        log_msg('Daemon height is ' + str(daemon_height))
-
-    # Gets height from xmrchain
-    if useXMRchianAsRef == 'True':
-        i = 1
-        while True:
-            try:
-                resp = requests.get(url='https://xmrchain.net/api/networkinfo', timeout=20)
-            except requests.exceptions.RequestException as err:
-                log_err(' ERROR: ' + str(err))
-                log_err(' Retry in 10s ...')
-                time.sleep(10)
-                continue
-
-            if str(resp) == '<Response [200]>':
                 try:
-                    jsontext = json.loads(resp.text)
-                except ValueError:
-                    log_err('Decoding xmrchain JSON has failed')
-                    continue
-
-                if jsontext['status'] == 'success':
-                    ref_height = int(jsontext['data']['height'])
-                    break
-                else:
-                    log_err(' ERROR:' + jsontext['status'])
-                    log_err(' Retry in 10s ...')
+                    resp = requests.get(url='https://xmrchain.net/api/networkinfo', timeout=20)
+                    resp.raise_for_status()  # raise on non-200 status
+                    blob = json.loads(resp.text)
+                except Exception as ex:
+                    Moneriote.log_err('Fetching xmrchain JSON has failed')
+                    Moneriote.log_err(str(err))
+                    Moneriote.log_err('Retry in 10s ...')
+                    retries += 1
                     time.sleep(10)
                     continue
-            else:
-                log_err(str(resp))
-                log_err(' Retry in 10s ...')
-                time.sleep(10)
-                if i > 5:
-                    log_msg('Xmrchain is not available now, skipping.')
-                    ref_height = -1
+
+                try:
+                    assert blob.get('status') == 'success'
+                    ref_height = blob.get('data', {}).get('height')
+                    assert ref_height.isdigit()
+                    ref_height = int(ref_height)
                     break
-                i += 1
-                continue
+                except Exception as ex:
+                    Moneriote.log_err('Decoding xmrchain JSON has failed')
+                    Moneriote.log_err(str(ex))
+                    continue
 
-        log_msg('xmrchain height is ' + str(ref_height))
+            Moneriote.log_msg('xmrchain height is %d' % ref_height)
 
-        # Compare block height
-        if (ref_height > daemon_height):
-            log_msg('Xmrchain height is higher. Daemon might be lagging.')
-            return ref_height
-        elif (ref_height == -1):
-            log_msg('Xmrchain is not available now. Use daemon height')
-            return daemon_height
-        else:
-            return daemon_height
-
-    else:
+            # Compare block height
+            if daemon_height is not None and ref_height > daemon_height:
+                Moneriote.log_msg('xmrchain height is higher. Daemon might be lagging. Using xmrchain height.')
+                return ref_height
+            elif ref_height is None:
+                Moneriote.log_err('xmrchain is not available now. Using daemon height.')
         return daemon_height
 
+    @staticmethod
+    def log_err(msg):
+        now = datetime.now()
+        print('\033[91m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
 
-'''
-    Gets the last known peers from the server
-'''
+    @staticmethod
+    def log_msg(msg):
+        now = datetime.now()
+        print('\033[92m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
 
 
 def load_nodes():
+    """Gets the last known peers from the server"""
+
     nodes = []
     process = Popen([
         monerodLocation,
