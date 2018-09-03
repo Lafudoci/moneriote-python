@@ -36,6 +36,19 @@ rpcPort = 18089  # This is the rpc server port that we'll check for
 currentNodes = []  # store current usable opennodes
 dns_record = {}  # store current DNS record
 
+
+def log_err(msg):
+    now = datetime.now()
+    print('\033[91m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
+
+
+def log_msg(msg):
+    now = datetime.now()
+    print('\033[92m[%s]\033[0m %s' % (now.strftime("%Y-%m-%d %H:%M"), msg))
+
+
+log_err("testing")
+
 '''
     Gets the current top block on the chain
 '''
@@ -56,11 +69,11 @@ def get_blockchain_height():
         universal_newlines=True, bufsize=1)
     (output, err) = process.communicate()
     if output.startswith('Error'):
-        print(output)
+        log_msg(output)
         daemon_height = 0
     else:
         daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
-        print('Daemon height is ' + str(daemon_height))
+        log_msg('Daemon height is ' + str(daemon_height))
 
     # Gets height from xmrchain
     if useXMRchianAsRef == 'True':
@@ -69,8 +82,8 @@ def get_blockchain_height():
             try:
                 resp = requests.get(url='https://xmrchain.net/api/networkinfo', timeout=20)
             except requests.exceptions.RequestException as err:
-                print(' ERROR: ' + str(err))
-                print(' Retry in 10s ...')
+                log_err(' ERROR: ' + str(err))
+                log_err(' Retry in 10s ...')
                 time.sleep(10)
                 continue
 
@@ -78,36 +91,36 @@ def get_blockchain_height():
                 try:
                     jsontext = json.loads(resp.text)
                 except ValueError:
-                    print('Decoding xmrchain JSON has failed')
+                    log_err('Decoding xmrchain JSON has failed')
                     continue
 
                 if jsontext['status'] == 'success':
                     ref_height = int(jsontext['data']['height'])
                     break
                 else:
-                    print(' ERROR:' + jsontext['status'])
-                    print(' Retry in 10s ...')
+                    log_err(' ERROR:' + jsontext['status'])
+                    log_err(' Retry in 10s ...')
                     time.sleep(10)
                     continue
             else:
-                print(str(resp))
-                print(' Retry in 10s ...')
+                log_err(str(resp))
+                log_err(' Retry in 10s ...')
                 time.sleep(10)
                 if i > 5:
-                    print('Xmrchain is not available now, skipping.')
+                    log_msg('Xmrchain is not available now, skipping.')
                     ref_height = -1
                     break
                 i += 1
                 continue
 
-        print('xmrchain height is ' + str(ref_height))
+        log_msg('xmrchain height is ' + str(ref_height))
 
         # Compare block height
         if (ref_height > daemon_height):
-            print('Xmrchain height is higher. Daemon might be lagging.')
+            log_msg('Xmrchain height is higher. Daemon might be lagging.')
             return ref_height
         elif (ref_height == -1):
-            print('Xmrchain is not available now. Use daemon height')
+            log_msg('Xmrchain is not available now. Use daemon height')
             return daemon_height
         else:
             return daemon_height
@@ -142,7 +155,7 @@ def load_nodes():
 
             if address not in currentNodes and address != '0.0.0.0':
                 nodes.append(address)
-    print('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
+    log_msg('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
     return nodes
 
 
@@ -179,7 +192,7 @@ def scan_node(accepted_height, address):
 def start_scanning_threads(current_nodes, blockchain_height):
     global currentNodes
 
-    print('Scanning port ' + str(rpcPort) + ' online & synced (height ' + str(blockchain_height) + ') nodes...')
+    log_msg('Scanning port ' + str(rpcPort) + ' online & synced (height ' + str(blockchain_height) + ') nodes...')
 
     pool = Pool(processes=maximumConcurrentScans)
     response = pool.map(partial(scan_node, blockchain_height), current_nodes)
@@ -194,14 +207,14 @@ def start_scanning_threads(current_nodes, blockchain_height):
         if node['valid'] is False and node['address'] in currentNodes:
             currentNodes.remove(node['address'])
 
-    print('After screening: ' + str(len(currentNodes)) + ' nodes')
+    log_msg('After screening: ' + str(len(currentNodes)) + ' nodes')
 
     try:
         cn = open('current_nodes', 'w')
         cn.write(json.dumps(currentNodes))
         cn.close()
     except (OSError, IOError) as e:
-        print('Write current_nodes file error:' + e)
+        log_err('Write current_nodes file error:' + e)
 
 
 """
@@ -212,19 +225,19 @@ def start_scanning_threads(current_nodes, blockchain_height):
 def update_dns_records():
     if currentNodes.__len__() > 3:
         random_record = random.sample(currentNodes, 3)  # random pick 3 records
-        print('Random pick 3 IP for DNS records')
+        log_msg('Random pick 3 IP for DNS records')
     else:
         random_record = currentNodes  # if less than 3 then use all records
-        print('Use all IP for DNS records')
+        log_msg('Use all IP for DNS records')
 
-    print('Start building records')
+    log_msg('Start building records')
 
     try:
         res_cf = requests.get(url=dnsApiUrl, params={'name': doaminName, 'per_page': 100}, headers=headers_cf)
         json_cf = json.loads(res_cf.text)
-        # print(json_cf)
+        # log_msg(json_cf)
         if json_cf['success'] == True:
-            print('Success When Get DNS List')
+            log_msg('Success When Get DNS List')
             # Create DNS Record
             for node_obj in random_record:
                 flag_exist = False
@@ -233,7 +246,7 @@ def update_dns_records():
                         flag_exist = True
                         break
                 if flag_exist:
-                    print(node_obj + ' already exist')
+                    log_msg(node_obj + ' already exist')
                 else:
                     try:
                         res_create = requests.post(url=dnsApiUrl,
@@ -241,12 +254,12 @@ def update_dns_records():
                                                    headers=headers_cf)
                         json_create = json.loads(res_create.text)
                         if json_create['success'] == True:
-                            print(node_obj + ' create record success')
+                            log_msg(node_obj + ' create record success')
                         else:
-                            print(node_obj + ' create record fail')
-                            print(res_create.text)
+                            log_err(node_obj + ' create record fail')
+                            log_err(res_create.text)
                     except (requests.exceptions.RequestException, ValueError) as err:
-                        print(str(err))
+                        log_msg(str(err))
             # Delete DNS Record
             for list_obj in json_cf['result']:
                 if list_obj['name'] == doaminName:
@@ -260,16 +273,16 @@ def update_dns_records():
                             res_del = requests.delete(url=dnsApiUrl + list_obj['id'], headers=headers_cf)
                             json_del = json.loads(res_del.text)
                             if json_del['success'] == True:
-                                print(list_obj['content'] + ' delete record success')
+                                log_msg(list_obj['content'] + ' delete record success')
                             else:
-                                print(list_obj['content'] + ' delete record fail')
-                                print(res_del.text)
+                                log_err(list_obj['content'] + ' delete record fail')
+                                log_err(res_del.text)
                         except (requests.exceptions.RequestException, ValueError) as err:
-                            print(str(err))
+                            log_msg(str(err))
         else:
-            print('Error When Get DNS List')
+            log_err('Error When Get DNS List')
     except (requests.exceptions.RequestException, ValueError) as err:
-        print(str(err))
+        log_err(str(err))
 
 
 def check_all_nodes():
@@ -279,27 +292,27 @@ def check_all_nodes():
         cn = open('current_nodes', 'r')  # read last nodes list from file
         currentNodes = json.loads(cn.read())
         cn.close()
-        print('Loaded ' + str(currentNodes.__len__()) + ' nodes in current_nodes.')
+        log_msg('Loaded ' + str(currentNodes.__len__()) + ' nodes in current_nodes.')
     except (OSError, IOError) as e:
-        print('File current_nodes was not found, will create new.')
+        log_msg('File current_nodes was not found, will create new.')
 
     if currentNodes.__len__() > 0:  # scan current existing nodes
-        print('Checking existing nodes...')
+        log_msg('Checking existing nodes...')
         start_scanning_threads(currentNodes, get_blockchain_height())
 
-    print('\nGetting new peers...')  # look for new nodes from daemon
+    log_msg('\nGetting new peers...')  # look for new nodes from daemon
     start_scanning_threads(load_nodes(), get_blockchain_height())
 
-    print('Building DNS records...')  # Build DNS records
+    log_msg('Building DNS records...')  # Build DNS records
     if currentNodes.__len__() > 0:
         update_dns_records()
     else:
-        print('No available node, skip DNS updating')
+        log_err('No available node, skip DNS updating')
 
-    print("\nWe currently have {} opennodes in reserve".format(currentNodes.__len__()))
+    log_msg("\nWe currently have {} opennodes in reserve".format(currentNodes.__len__()))
     update_time_stamp = str(datetime.now().isoformat(timespec='minutes'))
-    print('%s Update finished' % update_time_stamp)
-    print('Wait for next update in %d minutes ...' % scanInterval)
+    log_msg('%s Update finished' % update_time_stamp)
+    log_msg('Wait for next update in %d minutes ...' % scanInterval)
 
 
 if __name__ == '__main__':
