@@ -5,29 +5,56 @@ from datetime import datetime
 
 import json, re, requests, subprocess, random, configparser, time
 
-config = configparser.ConfigParser()
-config.read('config.ini')
 
-monerodLocation = config.get('MoneroRPC', 'monerodLocation')  # This is the relative or full path to the monerod binary
-moneroDaemonAddr = config.get('MoneroRPC', 'moneroDaemonAddr')  # The IP address that the rpc server is listening on
-moneroDaemonPort = config.get('MoneroRPC', 'moneroDaemonPort')  # The port address that the rpc server is listening on
-moneroDaemonAuth = config.get('MoneroRPC',
-                              'moneroDaemonAuth')  # The username:password that the rpc server requires (if set) - has to be something
+class Moneriote:
+    def __init__(self, cf_domain_name: str, cf_dns_api_zone: str,
+                 cf_dns_api_key: str, cf_dns_api_email: str,
+                 md_address: str = '127.0.0.1',
+                 md_port: int = 18082,
+                 md_auth: str = 'not:used',
+                 md_path: str = 'monerod.exe',
+                 md_use_xmr_chain_as_ref: bool = True):
+        """See config.ini for documentation on the params."""
+        self.md_path = md_path
+        self.md_daemon_addr = md_address
+        self.md_daemon_port = md_port
+        self.md_daemon_auth = md_auth
+        self.md_use_xmr_chain_as_ref = md_use_xmr_chain_as_ref
 
-useXMRchianAsRef = config.get('MoneroRPC',
-                              'useXMRchianAsRef')  # If sets true, the script will use xmrchain block height when daemon height is lagging
+        self.cf_domain_name = cf_domain_name
+        self.cf_dns_api_zone = cf_dns_api_zone
+        self.cf_dns_api_key = cf_dns_api_key
+        self.cf_dns_api_email = cf_dns_api_email
 
-doaminName = config.get('cloudflareAPI', 'doaminName')
-dnsApiZone = config.get('cloudflareAPI', 'dnsApiZone')
-dnsApiKey = config.get('cloudflareAPI', 'dnsApiKey')
-dnsApiEmail = config.get('cloudflareAPI', 'dnsApiEmail')
-dnsApiUrl = 'https://api.cloudflare.com/client/v4/zones/' + dnsApiZone + '/dns_records/'
+        self._cf_headers = {
+            'Content-Type': 'application/json',
+            'X-Auth-Email': self.cf_dns_api_email,
+            'X-Auth-Key': self.cf_dns_api_key
+        }
 
-headers_cf = {
-    'Content-Type': 'application/json',
-    'X-Auth-Email': dnsApiEmail,
-    'X-Auth-Key': dnsApiKey
-}
+    @classmethod
+    def from_config(cls):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+
+        def try_cast(val):
+            if val.isdigit():
+                return int(val)
+            if val.lower() in ['true', 'false']:
+                return bool(val)
+            return val
+
+        cfg_monero = {'md_%s' % k: try_cast(v) for k, v in config._sections.get('MoneroDaemon', {}).items()}
+        cfg_cloudflare = {'cf_%s' % k: try_cast(v) for k, v in config._sections.get('cloudflareAPI', {}).items()}
+        return cls(**{**cfg_cloudflare, **cfg_monero})
+
+    @property
+    def cf_dns_api_url(self):
+        return 'https://api.cloudflare.com/client/v4/zones/%s/dns_records/' % self.cf_dns_api_zone
+
+
+Moneriote.from_config()
+
 
 maximumConcurrentScans = 16  # How many servers we should scan at once
 acceptableBlockOffset = 3  # How much variance in the block height will be allowed
