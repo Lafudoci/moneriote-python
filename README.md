@@ -1,14 +1,15 @@
 # Moneriote-python
 Python scripts to maintain Monero opennodes DNS records via Cloudflare.
 
+![](https://i.imgur.com/VeKZnEX.png)
 
-#### History
+### History
 - Originally developed by [Gingeropolous/moneriote](https://github.com/Gingeropolous/moneriote) as a bash script.
 - Improved and rewritten in Python by [connorw600/moneriote](https://github.com/connorw600/moneriote/tree/opennodes-python)
 - Improved by [Lafudoci/moneriote](https://github.com/Lafudoci/moneriote/tree/opennodes-python)
 - Refactored/rewritten by [skftn/dsc](https://github.com/skftn)
 
-#### Usage
+### Usage
 
 You have:
 1. A Cloudflare account with an API key
@@ -32,13 +33,18 @@ The program loop looks like this:
 To summarize, this script actively searches the Monero network for nodes that have their RPC exposed to
 the world. It automatically removes the records who do not seem to be valid anymore.
 
-## Example
+### Example
 The following domain is maintained by this script. It updates every 10 minutes:
  * opennode.xmr-tw.org
 
-Example usage:
+### Installation
+
+As previously mentioned, Python 3.5 or higher is required.
 
 ```
+$ python3 --version
+Python 3.5.3
+$ sudo pip install requests
 $ python moneriote.py
 
 [2018-09-05 00:19] xmrchain height is 1654185
