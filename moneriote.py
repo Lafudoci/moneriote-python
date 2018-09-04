@@ -245,15 +245,17 @@ class Moneriote:
             args.extend(['--rpc-login', self.md_daemon_auth])
         args.append(cmd)
 
-        process = Popen([self.md_path, *args],
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        universal_newlines=True, bufsize=1)
-
         try:
+            process = Popen([self.md_path, *args],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            universal_newlines=True, bufsize=1)
             output, err = process.communicate(timeout=10)
             return output
-        except:
-            pass
+        except Exception as ex:
+            log_err('Could not spawn \'%s %s\': %s' % (
+                self.md_path, ' '.join(args), str(ex)
+            ))
+            sys.exit()
         finally:
             # cleanup
             process.kill()
