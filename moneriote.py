@@ -459,10 +459,15 @@ class Moneriote:
 
             # Shuffle. Add new records. Stop at max.
             nodes_found.shuffle()
-            for i, node in enumerate(nodes_found):
+            i = 0
+            for node in nodes_found:
                 if i >= (cf_add_count -1):
                     break
-                self.cf_add_record(node)
+
+                # Do not add DNS for already existing records
+                if node.address not in nodes_cf:
+                    self.cf_add_record(node)
+                    i += 1
 
             log_msg("Sleeping %d seconds" % self._loop_interval)
             time.sleep(self._loop_interval)
