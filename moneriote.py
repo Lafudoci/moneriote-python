@@ -457,7 +457,7 @@ class Moneriote:
         nodes_found.shuffle()
         i = 0
         for node in nodes_found:
-            if i >= (cf_add_count -1):
+            if i >= cf_add_count:
                 break
 
             # Do not add DNS for already existing records
