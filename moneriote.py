@@ -1,5 +1,3 @@
-#!/usr/bin/python3.5
-from typing import List
 import sys
 import json
 import re
@@ -12,7 +10,9 @@ from functools import partial
 from multiprocessing import Pool, freeze_support
 from subprocess import Popen
 from datetime import datetime
-import urllib.parse
+
+
+PATH_CACHE = 'cached_nodes.json'
 
 
 def banner():
@@ -115,8 +115,57 @@ class RpcNodeList:
     def __contains__(self, address):
         return address in self._addresses
 
+    def __add__(self, node_list):
+        for node in node_list:
+            self.append(node)
+        return self
+
     def __len__(self):
         return len(self.nodes)
+
+    def cache_write(self):
+        """Writes a cache file of valid nodes"""
+        log_msg('Writing \'%s\'' % PATH_CACHE)
+        data = []
+
+        for node in self.nodes:
+            if node.valid:
+                data.append({'address': node.address, 'port': node.port})
+        try:
+            f = open(PATH_CACHE, 'w')
+            f.write(json.dumps(data, indent=4))
+            f.close()
+        except Exception as ex:
+            log_err('Writing \'%s\' failed' % PATH_CACHE)
+            raise
+        log_msg('Written \'%s\' with %d nodes' % (PATH_CACHE, len(data)))
+
+    @staticmethod
+    def cache_read(path):
+        """
+        Reads nodes from the nodes cache file.
+        :return: List of RpcNode objects
+        """
+        log_msg('Reading \'%s\'' % path)
+
+        try:
+            f = open(path, 'r')
+            blob = json.loads(f.read())
+            f.close()
+        except Exception as ex:
+            log_err('Reading \'%s\' failed' % path)
+            return RpcNodeList()
+
+        if not isinstance(blob, list):
+            return RpcNodeList()
+
+        nodes = RpcNodeList()
+        for node in blob:
+            if 'address' in node:
+                nodes.append(RpcNode(**node))
+
+        log_msg('Loaded %d nodes from \'%s\'' % (len(nodes), path))
+        return nodes
 
 
 class RpcNode:
@@ -151,7 +200,6 @@ class RpcNode:
         # Check if the node we're checking is up to date (with a little buffer)
         if obj._acceptableBlockOffset >= block_height_diff >= (obj._acceptableBlockOffset * -1):
             obj.valid = True
-
         return obj
 
 
@@ -208,6 +256,12 @@ class Moneriote:
         # default Monero RPC port
         self._m_rpc_port = 18089
         self._blockchain_height = None
+
+        if not os.path.isfile(self._path_nodes_cache):
+            log_msg("Auto creating \'%s\'" % self._path_nodes_cache)
+            f = open(self._path_nodes_cache, 'a')
+            f.write('[]')
+            f.close()
 
     @classmethod
     def from_config(cls):
@@ -341,14 +395,14 @@ class Moneriote:
                 if md_height > xmrchain_height:
                     return md_height
                 elif xmrchain_height > md_height:
-                    log_msg("using xmrchain height, because it was higher")
+                    log_msg("Using xmrchain height, because it was higher")
                     return xmrchain_height
                 else:
-                    log_msg("using monerod height, because it was higher")
+                    log_msg("Using monerod height, because it was higher")
                     return md_height
 
             if xmrchain_height > 0:
-                log_msg("using xmrchain height")
+                log_msg("Using xmrchain height")
                 return xmrchain_height
 
         log_err("Failed to get blockheight from either monerod or xmrchain. "
@@ -382,7 +436,8 @@ class Moneriote:
             return nodes
 
         now = datetime.now()
-        log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (len(nodes), self._m_rpc_port))
+        log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
+            len(nodes), self._m_rpc_port))
 
         pool = Pool(processes=self._concurrent_scans)
         nodes = RpcNodeList.from_list(pool.map(partial(RpcNode.is_valid, self._blockchain_height), nodes))
@@ -396,6 +451,21 @@ class Moneriote:
             nodes = nodes.valid(valid=True)
         return nodes
 
+    def load_nodes(self):
+        # Verify cached nodes
+        nodes = RpcNodeList.cache_read(PATH_CACHE)
+        nodes = self.scan(nodes, remove_invalid=True)
+
+        # We have enough valid nodes to fill Cloudflare
+        if len(nodes) >= self.cf_max_records:
+            nodes.cache_write()
+            return nodes
+
+        # Ask monerod for more peers and verify
+        nodes += self.scan(self.monerod_get_peers(), remove_invalid=True)
+        nodes.cache_write()
+        return nodes
+
     def loop(self):
         # get & set the current blockheight
         height = self.monerod_get_height(method=self.md_height_discovery_method)
@@ -405,7 +475,7 @@ class Moneriote:
 
         self._blockchain_height = height
 
-        # get the correct zone
+        # Get the correct zone
         if not self.cf_zone_id:
             log_msg('Determining zone_id; looking for \'%s\'' % self.cf_domain_name)
             zones = self._cf_request(url='')
@@ -416,8 +486,8 @@ class Moneriote:
                 sys.exit()
             log_msg('Cloudflare zone_id \'%s\' matched to \'%s\'' % (self.cf_zone_id, self.cf_domain_name))
 
-        # fetch existing A records from Cloudflare
-        nodes_cf = RpcNodeList()
+        # Fetch existing A records from Cloudflare
+        nodes = RpcNodeList()
 
         log_msg('Fetching existing record(s) (%s.%s)' % (self.cf_subdomain_name, self.cf_domain_name))
         for record in self._cf_request('%s/dns_records/' % self.cf_zone_id):
@@ -426,46 +496,31 @@ class Moneriote:
                 node = RpcNode(address=record.get('content'),
                                cf_id=record.get('id'),
                                port=self._m_rpc_port)
-                nodes_cf.append(node)
-        log_msg("Found %d existing record(s) on Cloudflare" % len(nodes_cf))
+                nodes.append(node)
+        log_msg("Found %d existing record(s) on Cloudflare" % len(nodes))
 
-        # Validate existing Cloudflare records.
-        if len(nodes_cf):
-            nodes_cf = self.scan(nodes_cf)
-
-            # Remove invalid nodes, if at all.
-            for invalid_node in nodes_cf.valid_cf(valid=False):
-                self.cf_delete_record(invalid_node)
-            nodes_cf = nodes_cf.valid(valid=True)
-
-        # If we have room in Cloudflare for records, we need to discover nodes
-        cf_add_count = self.cf_max_records - len(nodes_cf)
-        if cf_add_count <= 0:
-            log_msg("No need to add more Cloudflare records")
-            return
-
-        log_msg("Trying to find %d more node(s) to add to Cloudflare" % cf_add_count)
-        nodes_found = self.monerod_get_peers()
-        # monerod gave us peers, verify them
-        nodes_found = self.scan(nodes_found, remove_invalid=True)
-
-        if len(nodes_found) <= 0:
-            log_msg("No available nodes. Skipping DNS updating")
-            return
+        # Get nodes from cache / monerod
+        nodes += self.load_nodes()
 
         # Shuffle. Add new records. Stop at max.
-        nodes_found.shuffle()
-        i = 0
-        for node in nodes_found:
-            if i >= cf_add_count:
-                break
+        nodes.shuffle()
 
-            # Do not add DNS for already existing records
-            if node.address in nodes_cf:
-                log_err("Refusing to add \'%s\', already in Cloudflare" % node.address)
-                continue
+        # @TODO: smart-insert cloudflare - check exisitng A
+
+        i = 0
+        for node in nodes:
+            if i >= self.cf_max_records:
+                break
             self.cf_add_record(node)
             i += 1
+
+        # If we have room in Cloudflare for records, we need to discover nodes
+        # cf_add_count = self.cf_max_records - len(nodes_cf)
+        # if cf_add_count <= 0:
+        #     log_msg("No need to add more Cloudflare records")
+        #     return
+        # >>> sorted([{'a': True}, {'a': False}, {'a': False}], key=lambda k: k['a'])
+        # alle false eerst
 
     def cf_add_record(self, node: RpcNode):
         log_msg('Cloudflare record insertion: %s' % node.address)
