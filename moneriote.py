@@ -15,7 +15,8 @@ moneroDaemonAuth = config.get('MoneroRPC', 'moneroDaemonAuth')  # The username:p
 
 useXMRchianAsRef = config.get('MoneroRPC', 'useXMRchianAsRef')  # If sets true, the script will use xmrchain block height when daemon height is lagging
 
-doaminName = config.get('cloudflareAPI', 'doaminName')
+domainName = config.get('cloudflareAPI', 'domainName')
+allDomainName = config.get('cloudflareAPI', 'allDomainName')
 dnsApiZone = config.get('cloudflareAPI', 'dnsApiZone')
 dnsApiKey = config.get('cloudflareAPI', 'dnsApiKey')
 dnsApiEmail = config.get('cloudflareAPI', 'dnsApiEmail')
@@ -200,36 +201,43 @@ def start_scanning_threads(current_nodes, blockchain_height):
         print('Write current_nodes file error:'+e)
     
 """
-    Update our dns records
+    Random pick records from all valid nodes
 """
-def update_dns_records():
-    if currentNodes.__len__() > 3:
-        random_record = random.sample(currentNodes, 3)     # random pick 3 records
-        print('Random pick 3 IP for DNS records')
+def random_pick_nodes():
+    if currentNodes.__len__() > 5:
+        random_record = random.sample(currentNodes, 5)     # random pick 5 records
+        print('Random pick 5 IP for DNS records')
     else:
-        random_record = currentNodes    # if less than 3 then use all records
+        random_record = currentNodes    # if less than 5 then use all records
         print('Use all IP for DNS records')
 
-    print('Start building records')
+    return random_record
+
+"""
+    Update our dns records
+"""
+def update_dns_records(domain, records):
+
+    print('Start building records of ' + str(domain))
 
     try:
-        res_cf = requests.get(url = dnsApiUrl, params = {'name': doaminName, 'per_page': 100}, headers = headers_cf)
+        res_cf = requests.get(url = dnsApiUrl, params = {'name': domain, 'per_page': 100}, headers = headers_cf)
         json_cf = json.loads(res_cf.text)
         #print(json_cf)
         if json_cf['success'] == True:
             print('Success When Get DNS List')
             #Create DNS Record
-            for node_obj in random_record:
+            for node_obj in records:
                 flag_exist = False
                 for list_obj in json_cf['result']:
-                    if list_obj['name'] == doaminName and list_obj['content'] == node_obj:
+                    if list_obj['name'] == domain and list_obj['content'] == node_obj:
                         flag_exist = True
                         break
                 if flag_exist:
                     print(node_obj + ' already exist')
                 else:
                     try:
-                        res_create = requests.post(url = dnsApiUrl, json = {'name': doaminName, 'type': 'A', 'content': node_obj}, headers = headers_cf)
+                        res_create = requests.post(url = dnsApiUrl, json = {'name': domain, 'type': 'A', 'content': node_obj}, headers = headers_cf)
                         json_create = json.loads(res_create.text)
                         if json_create['success'] == True:
                             print(node_obj + ' create record success')
@@ -240,9 +248,9 @@ def update_dns_records():
                         print(str(err))
             #Delete DNS Record
             for list_obj in json_cf['result']:
-                if list_obj['name'] == doaminName:
+                if list_obj['name'] == domain:
                     flag_exist = False
-                    for node_obj in random_record:
+                    for node_obj in records:
                         if node_obj == list_obj['content']:
                             flag_exist = True
                             break
@@ -285,7 +293,9 @@ def check_all_nodes():
     
     print ('Building DNS records...')           # Build DNS records
     if currentNodes.__len__() > 0:
-        update_dns_records()
+        update_dns_records(domainName, random_pick_nodes())
+        if allDomainName != '':
+            update_dns_records(allDomainName, currentNodes)
     else:
         print('No availible node, skip DNS updating')
     
@@ -300,4 +310,3 @@ if __name__ == '__main__':
     while True:
         check_all_nodes()
         time.sleep(scanInterval * 60)
-    
