@@ -234,7 +234,7 @@ class Moneriote:
             log_err("monerod not found in path \'%s\'" % self.md_path)
             return
 
-        log_msg("spawning daemon; executing command \'%s\'" % cmd)
+        log_msg("Spawning daemon; executing command \'%s\'" % cmd)
 
         # build proc args
         args = [
@@ -444,7 +444,7 @@ class Moneriote:
             log_msg("No need to add more Cloudflare records")
             return
 
-        log_msg("Trying to find %d more nodes to add to Cloudflare" % cf_add_count)
+        log_msg("Trying to find %d more node(s) to add to Cloudflare" % cf_add_count)
         nodes_found = self.monerod_get_peers()
         # monerod gave us peers, verify them
         nodes_found = self.scan(nodes_found, remove_invalid=True)
@@ -461,9 +461,11 @@ class Moneriote:
                 break
 
             # Do not add DNS for already existing records
-            if node.address not in nodes_cf:
-                self.cf_add_record(node)
-                i += 1
+            if node.address in nodes_cf:
+                log_err("Refusing to add \'%s\', already in Cloudflare" % node.address)
+                continue
+            self.cf_add_record(node)
+            i += 1
 
     def cf_add_record(self, node: RpcNode):
         log_msg('Cloudflare record insertion: %s' % node.address)
