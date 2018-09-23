@@ -27,7 +27,8 @@ setup(
     url='',
     install_requires=[
         'requests',
-        'click'
+        'click',
+        'python-dateutil'
     ],
     entry_points='''
     [console_scripts]

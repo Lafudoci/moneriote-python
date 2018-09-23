@@ -49,38 +49,66 @@ class Moneriote:
 
         self.monerod_check()
 
-    def _daemon_command(self, cmd: str):
-        if not os.path.exists(self.md_path):
-            log_err("monerod not found in path \'%s\'" % self.md_path)
+    def main(self):
+        # get & set the current blockheight
+        height = self.monerod_get_height(method=self.md_height_discovery_method)
+        if not height or not isinstance(height, int):
+            log_err("Unable to fetch the current blockchain height")
             return
+        self._blockchain_height = height
 
-        log_msg("Spawning daemon; executing command \'%s\'" % cmd)
+        nodes = RpcNodeList()
+        nodes += RpcNodeList.cache_read(PATH_CACHE)  # from `cached_nodes.json`
+        if nodes:
+            nodes = self.scan(nodes, remove_invalid=True)
 
-        # build proc args
-        args = [
-            '--rpc-bind-ip', self.md_daemon_addr,
-            '--rpc-bind-port', str(18081),
-        ]
-        if self.md_daemon_auth:
-            args.extend(['--rpc-login', self.md_daemon_auth])
-        args.append(cmd)
+        if len(nodes.nodes) <= 2:
+            peers = self.monerod_get_peers()  # from monerod
+            nodes += self.scan(peers, remove_invalid=True)
 
-        try:
-            process = Popen([self.md_path, *args],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            universal_newlines=True, bufsize=1)
-            output, err = process.communicate(timeout=10)
-            if not output:
-                log_err("No output from monerod")
-            return output
-        except Exception as ex:
-            log_err('Could not spawn \'%s %s\': %s' % (
-                self.md_path, ' '.join(args), str(ex)
-            ))
-            sys.exit()
-        finally:
-            # cleanup
-            process.kill()
+        if nodes.nodes:
+            nodes.cache_write()
+
+        nodes.shuffle()
+        inserts = nodes.nodes[:self.dns_provider.max_records]
+        dns_nodes = self.dns_provider.get_records()
+
+        # insert new records
+        for node in inserts:
+            if node.address not in dns_nodes:
+                self.dns_provider.add_record(node)
+
+        # remove old records
+        for i, node in enumerate(dns_nodes):
+            if node.address not in nodes or i >= self.dns_provider.max_records:
+                self.dns_provider.delete_record(node)
+
+    def scan(self, nodes: RpcNodeList, remove_invalid=False):
+        """
+        Start threads checking known nodes to see if they're alive.
+        :param nodes:
+        :param remove_invalid: only return valid nodes when set to True
+        :return: valid nodes
+        """
+        if len(nodes) == 0:
+            return nodes
+        nodes.nodes = nodes.nodes[:200]
+        now = datetime.now()
+        log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
+            len(nodes), self._m_rpc_port))
+
+        pool = Pool(processes=CONFIG['concurrent_scans'])
+        nodes = RpcNodeList.from_list(pool.map(partial(RpcNode.is_valid, self._blockchain_height), nodes))
+        pool.close()
+        pool.join()
+
+        log_msg('Scanning %d node(s) done after %d seconds, found %d valid' % (
+            len(nodes), (datetime.now() - now).total_seconds(), len(nodes.valid(valid=True))))
+
+        if remove_invalid:
+            nodes = nodes.valid(valid=True)
+
+        return nodes
 
     def monerod_check(self):
         url = 'http://%s:%d' % (self.md_daemon_addr, self.md_daemon_port)
@@ -172,63 +200,35 @@ class Moneriote:
         log_msg('Got peers from RPC: %d node(s)' % len(nodes))
         return nodes
 
-    def scan(self, nodes: RpcNodeList, remove_invalid=False):
-        """
-        Start threads checking known nodes to see if they're alive.
-        :param nodes:
-        :param remove_invalid: only return valid nodes when set to True
-        :return: valid nodes
-        """
-        if len(nodes) == 0:
-            return nodes
-        nodes.nodes = nodes.nodes[:200]
-        now = datetime.now()
-        log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
-            len(nodes), self._m_rpc_port))
-
-        pool = Pool(processes=CONFIG['concurrent_scans'])
-        nodes = RpcNodeList.from_list(pool.map(partial(RpcNode.is_valid, self._blockchain_height), nodes))
-        pool.close()
-        pool.join()
-
-        log_msg('Scanning %d node(s) done after %d seconds, found %d valid' % (
-            len(nodes), (datetime.now() - now).total_seconds(), len(nodes.valid(valid=True))))
-
-        if remove_invalid:
-            nodes = nodes.valid(valid=True)
-
-        return nodes
-
-    def main(self):
-        # get & set the current blockheight
-        height = self.monerod_get_height(method=self.md_height_discovery_method)
-        if not height or not isinstance(height, int):
-            log_err("Unable to fetch the current blockchain height")
+    def _daemon_command(self, cmd: str):
+        if not os.path.exists(self.md_path):
+            log_err("monerod not found in path \'%s\'" % self.md_path)
             return
-        self._blockchain_height = height
 
-        nodes = RpcNodeList()
-        nodes += RpcNodeList.cache_read(PATH_CACHE)  # from `cached_nodes.json`
-        if nodes:
-            nodes = self.scan(nodes, remove_invalid=True)
+        log_msg("Spawning daemon; executing command \'%s\'" % cmd)
 
-        if len(nodes.nodes) <= 2:
-            peers = self.monerod_get_peers()  # from monerod
-            nodes += self.scan(peers, remove_invalid=True)
+        # build proc args
+        args = [
+            '--rpc-bind-ip', self.md_daemon_addr,
+            '--rpc-bind-port', str(18081),
+        ]
+        if self.md_daemon_auth:
+            args.extend(['--rpc-login', self.md_daemon_auth])
+        args.append(cmd)
 
-        if nodes.nodes:
-            nodes.cache_write()
-
-        nodes.shuffle()
-        inserts = nodes.nodes[:self.dns_provider.max_records]
-        dns_nodes = self.dns_provider.get_records()
-
-        # insert new records
-        for node in inserts:
-            if node.address not in dns_nodes:
-                self.dns_provider.add_record(node)
-
-        # remove old records
-        for i, node in enumerate(dns_nodes):
-            if node.address not in nodes or i >= self.dns_provider.max_records:
-                self.dns_provider.delete_record(node)
+        try:
+            process = Popen([self.md_path, *args],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            universal_newlines=True, bufsize=1)
+            output, err = process.communicate(timeout=10)
+            if not output:
+                log_err("No output from monerod")
+            return output
+        except Exception as ex:
+            log_err('Could not spawn \'%s %s\': %s' % (
+                self.md_path, ' '.join(args), str(ex)
+            ))
+            sys.exit()
+        finally:
+            # cleanup
+            process.kill()

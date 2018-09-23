@@ -1,68 +1,200 @@
 # Moneriote-python
-Python scripts to maintain Monero opennodes DNS records via Cloudflare.
+
+moneriote-python is a Python script to maintain DNS records of monero nodes with their RPC port open. It actively scans 
+the Monero network through `monerod` and manages DNS records.
+
+An example is the remote node service [node.moneroworld.com](https://moneroworld.com/):
+
+```
+dig A node.moneroworld.com
+
+;; ANSWER SECTION:
+node.moneroworld.com.	3600	IN	CNAME	opennode.xmr-tw.org.
+opennode.xmr-tw.org.	300	IN	A	69.94.198.240
+opennode.xmr-tw.org.	300	IN	A	91.121.57.211
+opennode.xmr-tw.org.	300	IN	A	139.59.59.176
+opennode.xmr-tw.org.	300	IN	A	139.99.195.96
+opennode.xmr-tw.org.	300	IN	A	212.83.130.45
+```
+
+Supports the following DNS providers: [Cloudflare](https://www.cloudflare.com/), [TransIP](https://transip.nl)
+
+
+Screenshot
+----
 
 ![](https://i.imgur.com/VeKZnEX.png)
 
-### History
-- Originally developed by [Gingeropolous/moneriote](https://github.com/Gingeropolous/moneriote) as a bash script.
+### Requirements
+
+1. Python >= 3.5
+2. Domain name
+3. A running and fully synced Monero daemon
+
+Installation
+----
+
+```bash
+git clone <this repo> python-moneriote
+cd python-moneriote
+virtualenv -p /usr/bin/python3 venv
+source venv/bin/activate
+python setup.py develop
+```
+
+Moneriote is now installed inside the virtualenv. 
+
+
+Usage
+----
+
+```
+Usage: moneriote [OPTIONS]
+
+Options:
+  --monerod-path TEXT           Path to the monero daemon executable (monerod).  [default: monerod]
+  --monerod-address TEXT        Monero daemon address.  [default: 127.0.0.1]
+  --monerod-port INTEGER        Monero daemon port.  [default: 18081]
+  --monerod-auth TEXT           Monero daemon auth as 'user:pass'. Will be passed to monerod as `--rpc-login` argument.
+  --blockheight-discovery TEXT  Available options: 'monerod', 'xmrchain', 'moneroblocks'. When set to 'compare', it will use all methods and pick the highest
+                                blockheight.  [default: compare]
+  --dns-provider TEXT           The DNS provider/plugin to use.  [default: cloudflare]
+  --domain TEXT                 The domain name without the subdomain. 'example.com'.
+  --subdomain TEXT              The subdomain name.  [default: node]
+  --api-key TEXT                DNS API key.
+  --api-email TEXT              DNS email address or username.
+  --max-records INTEGER         Maximum number of DNS records to add.  [default: 5]
+  --loop-interval INTEGER       Update loop interval.  [default: 600]
+  --scan-interval INTEGER       Interval at which to mass-scan RPC nodes.  [default: 3600]
+  --concurrent_scans INTEGER    The amount of servers to scan at once.  [default: 20]
+  --from-config TEXT            Load configuration from ini file.
+  --help                        Show this message and exit.
+```
+
+Example
+----
+
+Easiest is to run in `screen` or `tmux`. If you really care about uptime and 
+want to babysit the process, write some configuration for `supervisord`  or `systemd`.
+
+```
+moneriote --monerod-path "/home/xmr/monero-gui-v0.12.3.0/monerod" 
+          --blockheight-discovery "compare" 
+          --dns-provider "cloudflare" 
+          --domain "example.com" 
+          --subdomain "node"
+          --api-key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+          --api-email "example@bla.com" 
+          --max-records 5
+```
+
+Flags
+----
+
+#### `--monerod-path`
+
+The full path to the monerod executable. On windows this ends on .exe.
+
+##### `--monerod-address`
+
+Default: `127.0.0.1`
+
+The address on which your local monerod is listening
+
+##### `--monerod-port`
+
+Default: `18081`
+
+The port on which your local monerod is listening
+
+##### `--monerod-auth`
+
+The authentication string to use when contacting monerod.
+
+##### `--blockheight-discovery`
+
+Default: `compare`
+
+Available options: `monerod`, `xmrchain`, `moneroblocks`. When set to `compare`, 
+it will use all methods and pick the highest blockheight.
+
+`xmrchain` and `moneroblocks` are both Monero explorer websites that expose an API.
+
+##### `--dns-provider`
+
+Available DNS providers: `cloudflare`, `transip`.
+
+If your DNS provider is not included but does provide an API for adding/removing records, 
+you can code a custom implementation of `DnsProvider`. See [moneriote/dns/](tree/master/moneriote/dns/)
+
+#### `--domain`
+
+The domain name without the subdomain, example: `example.com`
+
+#### `--subdomain`
+
+The subdomain name, example: `node`
+
+The full domain would become `node.example.com`
+
+#### `--api-key`
+
+The key required by your DNS provider for API access.
+
+#### `--api-email`
+
+The email required by your DNS provider for API access. This flag could also serve for an username, depending 
+on `DnsProvider`.
+
+#### `--max-records`
+
+Default: `5`
+
+The maximum amount of records to add.
+
+#### `--loop-interval`
+
+Default: `600`
+
+Shuffle/randomize the records every `X` seconds. Default is 10 minutes.
+
+#### `--scan-interval`
+
+Default: `3600`
+
+Ask monerod for new peers and mass-scan them, every `X` seconds. Default is 1 hour.
+
+#### `--concurrent_scans`
+
+Default: `20`
+
+The amount of servers to scan at once.
+
+#### `--from-config`
+
+Alternatively, configuration can be passed via `config.ini`.
+
+Development
+----
+
+Additional DNS provider(s) can be implemented by inheriting from `moneriote.dns.DnsProvider()`. Your custom 
+class must implement the following methods. 
+
+#### `def get_records(self)`
+
+Must return a list of nodes (`moneriote.rpc.RpcNodeList`).
+
+#### `def add_record(self, node: RpcNode)`
+
+Adds the A record to the subdomain
+
+#### `def delete_record(self, node: RpcNode):`
+
+Removes the A record from the subdomain.
+
+## History
+
+- Originally developed as a bash script in [Gingeropolous/moneriote](https://github.com/Gingeropolous/moneriote).
 - Improved and rewritten in Python by [connorw600/moneriote](https://github.com/connorw600/moneriote/tree/opennodes-python)
 - Improved by [Lafudoci/moneriote](https://github.com/Lafudoci/moneriote/tree/opennodes-python)
-- Refactored/rewritten by [skftn/dsc](https://github.com/skftn)
-
-### Usage
-
-You have:
-1. A Cloudflare account with an API key
-2. A fully synced Monero daemon
-3. A correct `config.ini`
-4. A Python >= 3.5 interpreter with `requests` installed (`pip install requests`).
-
-The program loop looks like this:
-
-1. Ask `monerod` for the blockchain height, or consult `xmrchain.net`. Or both, as specified by `config.ini`.
-2. Fetch the correct `zone_id` from Cloudflare
-3. Ask Cloudflare for existing A records, for example all the IPs belonging to `node.example.com`.
-4. Verify those records, by scanning the nodes for `http://<ip>:18089/get_height`
-    - Remove nodes who do not respond in time
-    - Remove nodes who seem to lag behind in blockchain height
-5. Ask `monerod` for a peer list (`print_pl`), it will result in ~1000 incoming nodes/peers.
-6. Mass scan the list of peers on port `18089`, try to fetch `/get_height`. Confirm acceptable blockheight.
-7. Insert a Cloudflare `A` record for valid nodes, but not more than `max_records`.
-8. Repeat.
-
-To summarize, this script actively searches the Monero network for nodes that have their RPC exposed to
-the world. It automatically removes the records who do not seem to be valid anymore.
-
-### Example
-The following domain is maintained by this script. It updates every 10 minutes:
- * opennode.xmr-tw.org
-
-### Installation
-
-As previously mentioned, Python 3.5 or higher is required.
-
-```
-$ python3 --version
-Python 3.5.3
-$ sudo pip install requests
-$ python moneriote.py
-
-[2018-09-05 00:19] xmrchain height is 1654185
-[2018-09-05 00:19] using xmrchain height
-[2018-09-05 00:19] Determining zone_id; looking for 'xmr-tw.org'
-[2018-09-05 00:19] Contacting Cloudflare (GET): https://api.cloudflare.com/client/v4/zones/
-[2018-09-05 00:19] Cloudflare zone_id 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' matched to 'xmr-tw.org'
-[2018-09-05 00:19] Fetching existing record(s) (opennode.xmr-tw.org)
-[2018-09-05 00:19] Contacting Cloudflare (GET): https://api.cloudflare.com/client/v4/zones/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/dns_records/
-[2018-09-05 00:19] Found 0 existing record(s) on Cloudflare
-[2018-09-05 00:19] Trying to find 5 more nodes to add to Cloudflare
-[2018-09-05 00:19] spawning daemon; executing command 'print_pl'
-[2018-09-05 00:19] Got peers from RPC: 990 node(s)
-[2018-09-05 00:19] Scanning 990 node(s) on port 18089. This can take several minutes. Let it run.
-[2018-09-05 00:19] Scanning 990 node(s) done after 8 seconds, found 2 valid
-[2018-09-05 00:19] Cloudflare record insertion: 73.115.113.104
-[2018-09-05 00:19] Contacting Cloudflare (POST): https://api.cloudflare.com/client/v4/zones/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/dns_records
-[2018-09-05 00:19] Cloudflare record insertion: 108.61.251.120
-[2018-09-05 00:19] Contacting Cloudflare (POST): https://api.cloudflare.com/client/v4/zones/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/dns_records
-[...]
-```
+- Rewritten by [skftn](https://github.com/skftn)
