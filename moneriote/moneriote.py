@@ -181,7 +181,7 @@ class Moneriote:
         """
         if len(nodes) == 0:
             return nodes
-
+        nodes.nodes = nodes.nodes[:200]
         now = datetime.now()
         log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
             len(nodes), self._m_rpc_port))
@@ -229,6 +229,6 @@ class Moneriote:
                 self.dns_provider.add_record(node)
 
         # remove old records
-        for node in dns_nodes:
-            if node.address not in nodes:
+        for i, node in enumerate(dns_nodes):
+            if node.address not in nodes or i >= self.dns_provider.max_records:
                 self.dns_provider.delete_record(node)

@@ -4,7 +4,7 @@ import json
 
 from dateutil.parser import parse as dateutil_parse
 
-from moneriote import PATH_CACHE
+from moneriote import PATH_CACHE, CONFIG
 from moneriote.utils import log_msg, log_err, make_json_request
 
 
@@ -42,9 +42,12 @@ class RpcNodeList:
     def __contains__(self, address):
         return address in self._addresses
 
-    def __add__(self, node_list):
-        for node in node_list:
-            self.append(node)
+    def __add__(self, inp):
+        if isinstance(inp, RpcNodeList):
+            for node in inp:
+                self.append(node)
+        elif isinstance(inp, RpcNode):
+            self.append(inp)
         return self
 
     def __len__(self):
@@ -99,7 +102,7 @@ class RpcNodeList:
 
 
 class RpcNode:
-    def __init__(self, address: str, uid=None, port=18089):
+    def __init__(self, address: str, uid=None, port=18089, **kwargs):
         """
         :param address: ip
         :param uid: record uid as per DNS provider
@@ -109,6 +112,7 @@ class RpcNode:
         self.uid = uid
         self._acceptableBlockOffset = 3
         self.valid = False
+        self.kwargs = kwargs
 
     @staticmethod
     def is_valid(current_blockheight, obj):
@@ -127,9 +131,9 @@ class RpcNode:
             return obj
 
         height = blob.get('height')
-        block_height_diff = height - current_blockheight
+        diff = current_blockheight - height
 
         # Check if the node we're checking is up to date (with a little buffer)
-        if obj._acceptableBlockOffset >= block_height_diff >= (obj._acceptableBlockOffset * -1):
+        if diff <= obj._acceptableBlockOffset:
             obj.valid = True
         return obj

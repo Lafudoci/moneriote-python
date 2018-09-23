@@ -15,7 +15,7 @@ def banner():
   ██ ██▌▐█▌▐█▌.▐▌██▐█▌▐█▄▄▌▐█•█▌▐█▌▐█▌.▐▌ ▐█▌·▐█▄▄▌
   ▀▀  █▪▀▀▀ ▀█▄▀▪▀▀ █▪ ▀▀▀ .▀  ▀▀▀▀ ▀█▄▀▪ ▀▀▀  ▀▀▀  
 
- @skftn (dsc) @Lafudoci @gingeropolous @connorw600
+    @skftn @Lafudoci @gingeropolous @connorw600
  \033[0m
     """.strip()
     print(header)

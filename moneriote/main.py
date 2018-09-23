@@ -1,4 +1,3 @@
-import sys
 import functools
 from time import sleep
 
@@ -12,7 +11,7 @@ click_option = functools.partial(click.option, show_default=True)
 @click_option('--monerod-port', default=18081, help="Monero daemon port.")
 @click_option('--monerod-auth', help="Monero daemon auth as 'user:pass'. Will be passed to monerod as "
                                      "`--rpc-login` argument.")
-@click_option('--blockheight-discovery', default='moneroblocks',
+@click_option('--blockheight-discovery', default='compare',
               help="Available options: 'monerod', 'xmrchain', 'moneroblocks'. When set to 'compare', "
                    "it will use all methods and pick the highest blockheight.")
 @click_option('--dns-provider', default="cloudflare", help="The DNS provider/plugin to use.")
@@ -31,7 +30,7 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
     from moneriote import CONFIG
     from moneriote.moneriote import Moneriote
     from moneriote.utils import log_err, log_msg, banner, parse_ini
-    from moneriote.dns import Cloudflare
+    from moneriote.dns import Cloudflare, TransIP
 
     banner()
 
@@ -66,6 +65,13 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
             subdomain_name=subdomain,
             api_key=api_key,
             api_email=api_email,
+            max_records=max_records)
+    elif dns_provider == 'transip':
+        dns_provider = TransIP(
+            api_email=api_email,
+            api_key=api_key,
+            subdomain_name=subdomain,
+            domain_name=domain,
             max_records=max_records)
     else:
         log_err("Unknown DNS provider \'%s\'" % dns_provider, fatal=True)

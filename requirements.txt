@@ -1,2 +1,5 @@
 requests==2.19.1
 python-dateutil
+suds-jurko
+rsa
+pycrypto
