@@ -22,7 +22,3 @@ class DnsProvider(object):
 
     def delete_record(self, node: RpcNode):
         raise NotImplementedError()
-
-
-from moneriote.dns.cloudflare import Cloudflare
-from moneriote.dns.transip import TransIP

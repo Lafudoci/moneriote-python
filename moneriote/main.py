@@ -30,7 +30,6 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
     from moneriote import CONFIG
     from moneriote.moneriote import Moneriote
     from moneriote.utils import log_err, log_msg, banner, parse_ini
-    from moneriote.dns import Cloudflare, TransIP
 
     banner()
 
@@ -60,6 +59,7 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
     CONFIG['scan_interval'] = scan_interval
 
     if dns_provider == 'cloudflare':
+        from moneriote.dns.cloudflare import Cloudflare
         dns_provider = Cloudflare(
             domain_name=domain,
             subdomain_name=subdomain,
@@ -67,6 +67,7 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
             api_email=api_email,
             max_records=max_records)
     elif dns_provider == 'transip':
+        from moneriote.dns.transip import TransIP
         dns_provider = TransIP(
             api_email=api_email,
             api_key=api_key,

@@ -20,8 +20,8 @@ class Cloudflare(DnsProvider):
         if not self.zone_id:
             log_msg('Determining zone_id; looking for \'%s\'' % self.domain_name)
             result = make_json_request(url=self.api_base, headers=self.headers)
-            zones = result.get('result')
             try:
+                zones = result.get('result')
                 self.zone_id = next(zone.get('id') for zone in zones if zone.get('name') == self.domain_name)
             except StopIteration:
                 log_err('could not determine zone_id. Is your Cloudflare domain correct?', fatal=True)

@@ -92,7 +92,7 @@ class Moneriote:
         """
         if len(nodes) == 0:
             return nodes
-        nodes.nodes = nodes.nodes[:200]
+
         now = datetime.now()
         log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
             len(nodes), self._m_rpc_port))
