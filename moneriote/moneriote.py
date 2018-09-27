@@ -80,7 +80,7 @@ class Moneriote:
 
         # remove old records
         for i, node in enumerate(dns_nodes):
-            if node.address not in nodes or i >= self.dns_provider.max_records:
+            if node.address not in inserts:
                 self.dns_provider.delete_record(node)
 
     def scan(self, nodes: RpcNodeList, remove_invalid=False):
@@ -210,7 +210,7 @@ class Moneriote:
         # build proc args
         args = [
             '--rpc-bind-ip', self.md_daemon_addr,
-            '--rpc-bind-port', str(18081),
+            '--rpc-bind-port', str(self.md_daemon_port),
         ]
         if self.md_daemon_auth:
             args.extend(['--rpc-login', self.md_daemon_auth])

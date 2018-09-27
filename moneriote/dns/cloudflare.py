@@ -31,7 +31,9 @@ class Cloudflare(DnsProvider):
         nodes = RpcNodeList()
         log_msg('Fetching existing record(s) (%s.%s)' % (self.subdomain_name, self.domain_name))
 
-        result = make_json_request('%s/%s/dns_records/' % (self.api_base, self.zone_id), headers=self.headers)
+        result = make_json_request('%s/%s/dns_records/?type=A&name=%s.%s' % (
+            self.api_base, self.zone_id,
+            self.subdomain_name, self.domain_name), headers=self.headers)
         records = result.get('result')
 
         # filter on A records / subdomain
