@@ -166,7 +166,7 @@ class Moneriote:
                     assert blob.get('status') == 'success'
                     data['xmrchain_height'] = blob.get('data', {}).get('height')
                     assert isinstance(data['xmrchain_height'], int)
-                    log_msg('xmrchain height is %d' % xmrchain_height)
+                    log_msg('xmrchain height is %d' % data['xmrchain_height'])
                     if method == 'xmrchain':
                         return data['xmrchain_height']
                     break
