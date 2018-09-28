@@ -115,7 +115,7 @@ class Moneriote:
 
         try:
             resp = requests.get(url, timeout=2)
-            assert resp.status_code == 404
+            assert resp.status_code in [401, 403, 404]
             assert resp.headers.get('Server', '').startswith('Epee')
             return True
         except Exception as ex:
