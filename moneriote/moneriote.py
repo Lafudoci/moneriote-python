@@ -73,15 +73,18 @@ class Moneriote:
         inserts = nodes.nodes[:self.dns_provider.max_records]
         dns_nodes = self.dns_provider.get_records()
 
-        # insert new records
-        for node in inserts:
-            if node.address not in dns_nodes:
-                self.dns_provider.add_record(node)
+        if dns_nodes != -1:
+            # insert new records
+            for node in inserts:
+                if node.address not in dns_nodes:
+                    self.dns_provider.add_record(node)
 
-        # remove old records
-        for i, node in enumerate(dns_nodes):
-            if node.address not in inserts:
-                self.dns_provider.delete_record(node)
+            # remove old records
+            for i, node in enumerate(dns_nodes):
+                if node.address not in inserts:
+                    self.dns_provider.delete_record(node)
+        else:
+            log_err('Could not fetch DNS records, skipping this update.')
 
     def scan(self, nodes: RpcNodeList, remove_invalid=False):
         """
