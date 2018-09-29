@@ -48,16 +48,16 @@ class Cloudflare(DnsProvider):
                     if record.get('type') != 'A' or record.get('name') != self.fulldomain_name:
                         continue
 
-                node = RpcNode(address=record.get('content'), uid=record.get('id'))
-                nodes.append(node)
-                log_msg('> A %s %s' % (record.get('name'), record.get('content')))
-                break
+                    node = RpcNode(address=record.get('content'), uid=record.get('id'))
+                    nodes.append(node)
+                    log_msg('> A %s %s' % (record.get('name'), record.get('content')))
+                return nodes
             
             except Exception as ex:
                 log_err("Cloudflare record fetching failed: %s" % (str(ex)))
                 retries += 1
                 time.sleep(1)
-        return nodes
+        
 
     def add_record(self, node: RpcNode):
         log_msg('Record insertion: %s' % node.address)
