@@ -64,7 +64,7 @@ class Cloudflare(DnsProvider):
 
         try:
             url = '%s/%s/dns_records' % (self.api_base, self.zone_id)
-            make_json_request(url=url, method='POST', headers=self.headers, json={
+            make_json_request(url=url, method='POST', verbose = False, headers=self.headers, json={
                 'name': self.subdomain_name,
                 'content': node.address,
                 'type': 'A',
@@ -79,7 +79,7 @@ class Cloudflare(DnsProvider):
 
         try:
             url = '%s/%s/dns_records/%s' % (self.api_base, self.zone_id, node.uid)
-            data = make_json_request(url=url, method='DELETE', headers=self.headers)
+            data = make_json_request(url=url, method='DELETE', verbose = False, headers=self.headers)
             assert data.get('success') is True
             return data.get('result')
         except Exception as ex:
