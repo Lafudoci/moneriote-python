@@ -62,7 +62,7 @@ class RpcNodeList:
             if node.valid:
                 data.append({'address': node.address,
                              'port': node.port,
-                             'dt': now.strftime('%Y-%m-%d %H:%M:%S')})
+                             'dt': node.dt})
         try:
             f = open(PATH_CACHE, 'w')
             f.write(json.dumps(data, indent=4))
@@ -93,7 +93,7 @@ class RpcNodeList:
 
         nodes = RpcNodeList()
         for node in blob:
-            dt = dateutil_parse(node.pop('dt'))
+            dt = dateutil_parse(node['dt'])
             if (datetime.now() - dt).total_seconds() < CONFIG['scan_interval'] and 'address' in node:
                 nodes.append(RpcNode(**node))
 
@@ -102,7 +102,7 @@ class RpcNodeList:
 
 
 class RpcNode:
-    def __init__(self, address: str, uid=None, port=18089, **kwargs):
+    def __init__(self, address: str, uid=None, port=18089, dt= '', **kwargs):
         """
         :param address: ip
         :param uid: record uid as per DNS provider
@@ -112,13 +112,18 @@ class RpcNode:
         self.uid = uid
         self._acceptableBlockOffset = 3
         self.valid = False
+        self.dt = dt
         self.kwargs = kwargs
 
     @staticmethod
     def is_valid(current_blockheight, obj):
+        now = datetime.now()
         # Scans the current node to see if the RPC port is available and is within the accepted range
         url = 'http://%s:%d/' % (obj.address, obj.port)
         url = '%s%s' % (url, 'getheight')
+
+        if len(obj.dt) == 0:
+            obj.dt = now.strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             blob = make_json_request(url, verbose=False, timeout=2)
