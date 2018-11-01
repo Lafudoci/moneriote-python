@@ -40,6 +40,7 @@ class Moneriote:
         # default Monero RPC port
         self._m_rpc_port = 18089
         self._blockchain_height = None
+        self._daemon_version = None
 
         if not os.path.isfile(PATH_CACHE):
             log_msg("Auto creating \'%s\'" % PATH_CACHE)
@@ -56,6 +57,12 @@ class Moneriote:
             log_err("Unable to fetch the current blockchain height")
             return
         self._blockchain_height = height
+
+        version = self.monerod_get_version()
+        if not version or not isinstance(version, int):
+            log_err("Unable to fetch the current blockchain height")
+            return
+        self._daemon_version = version
 
         nodes = RpcNodeList()
         nodes += RpcNodeList.cache_read(PATH_CACHE)  # from `cached_nodes.json`
@@ -98,6 +105,7 @@ class Moneriote:
             len(nodes), self._m_rpc_port))
 
         pool = Pool(processes=CONFIG['concurrent_scans'])
+        nodes = RpcNodeList.from_list(pool.map(partial(RpcNode.is_updated, self._daemon_version), nodes))
         nodes = RpcNodeList.from_list(pool.map(partial(RpcNode.is_valid, self._blockchain_height), nodes))
         pool.close()
         pool.join()
@@ -179,6 +187,36 @@ class Moneriote:
         if data:
             return max(data.values())
         log_err('Unable to obtain blockheight.')
+
+    def monerod_get_version(self):
+        # Gets the current version of daemon
+        url = 'http://%s:%d/' % (self.md_daemon_addr, self.md_daemon_port)
+        url = '%s%s' % (url, 'json_rpc')
+        get_version_command = {"jsonrpc":"2.0","id":"0","method":"get_version"}
+        auth = self.md_daemon_auth
+
+        md_version = 0
+        max_retries = 5
+        retries = 0
+        while True:
+            if retries > max_retries:
+                break
+            try:
+                blob = make_json_request(url, method='POST', verbose=False, timeout=2, auth=auth, json=get_version_command)
+                assert blob.get('result').get('status') == 'OK'
+                md_version = blob.get('result', {}).get('version')
+                assert isinstance(md_version, int)
+                log_msg('daemon version is %d' % md_version)
+                break
+            except Exception as ex:
+                log_msg('Fetching daemon version has failed. Retrying.'+ str(ex))
+                retries += 1
+                time.sleep(1)
+                continue
+
+        if md_version > 0:
+            return md_version
+        log_err('Unable to obtain current version.')
 
     def monerod_get_peers(self):
         """Gets the last known peers from monerod"""

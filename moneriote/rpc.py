@@ -137,3 +137,28 @@ class RpcNode:
         if diff <= obj._acceptableBlockOffset:
             obj.valid = True
         return obj
+
+    @staticmethod
+    def is_updated(current_version, obj):
+        # Scans the current node to see if the RPC port is available and is with the accepted version
+        url = 'http://%s:%d/' % (obj.address, obj.port)
+        url = '%s%s' % (url, 'json_rpc')
+        get_version_command = {"jsonrpc":"2.0","id":"0","method":"get_version"}
+
+        try:
+            blob = make_json_request(url, method='POST', verbose=False, timeout=2, json=get_version_command)
+            if not blob:
+                raise Exception()
+        except Exception as ex:
+            return obj
+
+        if not isinstance(blob.get('result', {}).get('version', ''), int):
+            return obj
+
+        version = blob.get('result').get('version')
+        diff = current_version - version
+
+        # Check if the node's version we're checking is the same with or newer than ref daemon's version
+        if diff >= 0:
+            obj.valid = True
+        return obj
