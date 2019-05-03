@@ -62,7 +62,7 @@ class Moneriote:
         if nodes:
             nodes = self.scan(nodes, remove_invalid=True)
 
-        if len(nodes.nodes) <= 2:
+        if len(nodes.nodes) <= self.dns_provider.max_records:
             peers = self.monerod_get_peers()  # from monerod
             nodes += self.scan(peers, remove_invalid=True)
 
@@ -70,7 +70,12 @@ class Moneriote:
             nodes.cache_write()
 
         nodes.shuffle()
+
         inserts = nodes.nodes[:self.dns_provider.max_records]
+        insert_ips = []
+        for node in inserts:
+            insert_ips.append(node.address)
+        
         dns_nodes = self.dns_provider.get_records()
 
         if dns_nodes != None:
@@ -80,8 +85,8 @@ class Moneriote:
                     self.dns_provider.add_record(node)
 
             # remove old records
-            for i, node in enumerate(dns_nodes):
-                if node.address not in inserts:
+            for node in dns_nodes:
+                if node.address not in insert_ips:
                     self.dns_provider.delete_record(node)
         else:
             log_err('Could not fetch DNS records, skipping this update.')
