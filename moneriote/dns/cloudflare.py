@@ -34,7 +34,7 @@ class Cloudflare(DnsProvider):
         log_msg('Fetching existing record(s) (%s.%s)' % (self.subdomain_name, self.domain_name))
 
         retries = 0
-        while (retries < max_retries):
+        while (True):
             try:
                 result = make_json_request('%s/%s/dns_records/?type=A&name=%s.%s' % (
                     self.api_base, self.zone_id,
@@ -55,6 +55,8 @@ class Cloudflare(DnsProvider):
                 log_err("Cloudflare record fetching failed: %s" % (str(ex)))
                 retries += 1
                 time.sleep(1)
+                if retries > max_retries:
+                    return None
         
 
     def add_record(self, node: RpcNode):
