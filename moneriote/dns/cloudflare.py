@@ -1,3 +1,4 @@
+import time
 from moneriote.dns import DnsProvider
 from moneriote.rpc import RpcNode, RpcNodeList
 from moneriote.utils import log_err, log_msg, random_user_agent, make_json_request
@@ -28,30 +29,40 @@ class Cloudflare(DnsProvider):
             log_msg('Cloudflare zone_id \'%s\' matched to \'%s\'' % (self.zone_id, self.domain_name))
 
     def get_records(self):
+        max_retries = 5
         nodes = RpcNodeList()
         log_msg('Fetching existing record(s) (%s.%s)' % (self.subdomain_name, self.domain_name))
 
-        result = make_json_request('%s/%s/dns_records/?type=A&name=%s.%s' % (
-            self.api_base, self.zone_id,
-            self.subdomain_name, self.domain_name), headers=self.headers)
-        records = result.get('result')
+        retries = 0
+        while (retries < max_retries):
+            try:
+                result = make_json_request('%s/%s/dns_records/?type=A&name=%s.%s' % (
+                    self.api_base, self.zone_id,
+                    self.subdomain_name, self.domain_name), headers=self.headers)
+                records = result.get('result')
+                
+                # filter on A records / subdomain
+                for record in records:
+                    if record.get('type') != 'A' or record.get('name') != self.fulldomain_name:
+                        continue
 
-        # filter on A records / subdomain
-        for record in records:
-            if record.get('type') != 'A' or record.get('name') != self.fulldomain_name:
-                continue
-
-            node = RpcNode(address=record.get('content'), uid=record.get('id'))
-            nodes.append(node)
-            log_msg('> A %s %s' % (record.get('name'), record.get('content')))
-        return nodes
+                    node = RpcNode(address=record.get('content'), uid=record.get('id'))
+                    nodes.append(node)
+                    log_msg('> A %s %s' % (record.get('name'), record.get('content')))
+                return nodes
+            
+            except Exception as ex:
+                log_err("Cloudflare record fetching failed: %s" % (str(ex)))
+                retries += 1
+                time.sleep(1)
+        
 
     def add_record(self, node: RpcNode):
         log_msg('Record insertion: %s' % node.address)
 
         try:
             url = '%s/%s/dns_records' % (self.api_base, self.zone_id)
-            make_json_request(url=url, method='POST', headers=self.headers, json={
+            make_json_request(url=url, method='POST', verbose = False, headers=self.headers, json={
                 'name': self.subdomain_name,
                 'content': node.address,
                 'type': 'A',
@@ -66,7 +77,7 @@ class Cloudflare(DnsProvider):
 
         try:
             url = '%s/%s/dns_records/%s' % (self.api_base, self.zone_id, node.uid)
-            data = make_json_request(url=url, method='DELETE', headers=self.headers)
+            data = make_json_request(url=url, method='DELETE', verbose = False, headers=self.headers)
             assert data.get('success') is True
             return data.get('result')
         except Exception as ex:
