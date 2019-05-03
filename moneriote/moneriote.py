@@ -73,7 +73,7 @@ class Moneriote:
         inserts = nodes.nodes[:self.dns_provider.max_records]
         dns_nodes = self.dns_provider.get_records()
 
-        if dns_nodes != -1:
+        if len(dns_nodes.nodes) > 0:
             # insert new records
             for node in inserts:
                 if node.address not in dns_nodes:

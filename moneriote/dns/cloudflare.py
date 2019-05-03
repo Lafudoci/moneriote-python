@@ -34,9 +34,7 @@ class Cloudflare(DnsProvider):
         log_msg('Fetching existing record(s) (%s.%s)' % (self.subdomain_name, self.domain_name))
 
         retries = 0
-        while True:
-            if retries > max_retries:
-                return -1
+        while (retries < max_retries):
             try:
                 result = make_json_request('%s/%s/dns_records/?type=A&name=%s.%s' % (
                     self.api_base, self.zone_id,
