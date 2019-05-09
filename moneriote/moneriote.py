@@ -41,6 +41,8 @@ class Moneriote:
         self._m_rpc_port = 18089
         self._blockchain_height = None
 
+        self.last_mass_scan_time = 0
+
         if not os.path.isfile(PATH_CACHE):
             log_msg("Auto creating \'%s\'" % PATH_CACHE)
             f = open(PATH_CACHE, 'a')
@@ -61,10 +63,14 @@ class Moneriote:
         nodes += RpcNodeList.cache_read(PATH_CACHE)  # from `cached_nodes.json`
         if nodes:
             nodes = self.scan(nodes, remove_invalid=True)
+        
+        now = time.time()
+        this_round_uptime = now - self.last_mass_scan_time
 
-        if len(nodes.nodes) <= self.dns_provider.max_records:
+        if len(nodes.nodes) <= self.dns_provider.max_records or this_round_uptime > CONFIG['scan_interval']:
             peers = self.monerod_get_peers()  # from monerod
             nodes += self.scan(peers, remove_invalid=True)
+            self.last_mass_scan_time = now
 
         if nodes.nodes:
             nodes.cache_write()
