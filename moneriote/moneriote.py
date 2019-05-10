@@ -245,7 +245,6 @@ class Moneriote:
             log_err('Could not spawn \'%s %s\': %s' % (
                 self.md_path, ' '.join(args), str(ex)
             ))
-            # sys.exit()
         finally:
             # cleanup
             process.kill()
