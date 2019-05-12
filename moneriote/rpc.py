@@ -94,10 +94,7 @@ class RpcNodeList:
         nodes = RpcNodeList()
         for node in blob:
             dt = dateutil_parse(node['dt'])
-            if (datetime.now() - dt).total_seconds() > CONFIG['scan_interval']:
-                nodes = RpcNodeList()
-                break
-            if (datetime.now() - dt).total_seconds() < CONFIG['scan_interval'] and 'address' in node:
+            if 'address' in node:
                 nodes.append(RpcNode(**node))
 
         log_msg('Loaded %d nodes from \'%s\'' % (len(nodes), path))

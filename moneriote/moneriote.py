@@ -41,6 +41,8 @@ class Moneriote:
         self._m_rpc_port = 18089
         self._blockchain_height = None
 
+        self.last_mass_scan_time = 0
+
         if not os.path.isfile(PATH_CACHE):
             log_msg("Auto creating \'%s\'" % PATH_CACHE)
             f = open(PATH_CACHE, 'a')
@@ -61,30 +63,42 @@ class Moneriote:
         nodes += RpcNodeList.cache_read(PATH_CACHE)  # from `cached_nodes.json`
         if nodes:
             nodes = self.scan(nodes, remove_invalid=True)
+        
+        now = time.time()
+        this_round_uptime = now - self.last_mass_scan_time
 
-        if len(nodes.nodes) <= 2:
+        if len(nodes.nodes) <= self.dns_provider.max_records or this_round_uptime > CONFIG['scan_interval']:
             peers = self.monerod_get_peers()  # from monerod
             nodes += self.scan(peers, remove_invalid=True)
+            self.last_mass_scan_time = now
 
-        if nodes.nodes:
+        if len(nodes.nodes) > 0:
             nodes.cache_write()
 
-        nodes.shuffle()
-        inserts = nodes.nodes[:self.dns_provider.max_records]
-        dns_nodes = self.dns_provider.get_records()
+            nodes.shuffle()
 
-        if dns_nodes != None:
-            # insert new records
+            inserts = nodes.nodes[:self.dns_provider.max_records]
+            insert_ips = []
             for node in inserts:
-                if node.address not in dns_nodes:
-                    self.dns_provider.add_record(node)
+                insert_ips.append(node.address)
+            
+            dns_nodes = self.dns_provider.get_records()
 
-            # remove old records
-            for i, node in enumerate(dns_nodes):
-                if node.address not in inserts:
-                    self.dns_provider.delete_record(node)
+            if dns_nodes != None:
+                # insert new records
+                for node in inserts:
+                    if node.address not in dns_nodes:
+                        self.dns_provider.add_record(node)
+
+                # remove old records
+                for node in dns_nodes:
+                    if node.address not in insert_ips:
+                        self.dns_provider.delete_record(node)
+            else:
+                log_err('Could not fetch DNS records, skipping this update.')
+        
         else:
-            log_err('Could not fetch DNS records, skipping this update.')
+            log_err('Could not get any valid node, skipping this update.')
 
     def scan(self, nodes: RpcNodeList, remove_invalid=False):
         """
@@ -231,7 +245,6 @@ class Moneriote:
             log_err('Could not spawn \'%s %s\': %s' % (
                 self.md_path, ' '.join(args), str(ex)
             ))
-            sys.exit()
         finally:
             # cleanup
             process.kill()
