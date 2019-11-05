@@ -14,5 +14,5 @@ The moneriote.py use Monero daemon to request peers from another fully synced Mo
 3. Run moneriote.py
 
 ## Example
-The following domain is maintain by this script for 18089 port opennode, updates every 10 minutes.
+The following domain is maintain by this script for 18089 port opennode, DNS records update every 3 minutes.
  * opennode.xmr-tw.org
