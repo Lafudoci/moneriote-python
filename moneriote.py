@@ -30,7 +30,9 @@ headers_cf = {
 
 maximumConcurrentScans = 16   # How many servers we should scan at once
 acceptableBlockOffset = 3     # How much variance in the block height will be allowed
-scanInterval = 10             # N Minutes
+# scanInterval = 60             # N Minutes for mass scan RPC peers
+shuffleInterval = 3            # N Minutes for quick shuffle current DNS records
+recordNum = 5                 # Max number of DNS record to keep
 rpcPort = 18089               # This is the rpc server port that we'll check for
 currentNodes = []             # store current usable opennodes
 dns_record = {}               # store current DNS record
@@ -117,7 +119,7 @@ def get_blockchain_height():
 '''
     Gets the last known peers from the server
 '''
-def load_nodes():
+def load_peers():
 
     nodes = []
     process = Popen([
@@ -142,6 +144,21 @@ def load_nodes():
                 nodes.append(address)
     print('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
     return nodes
+
+
+"""
+    Load local current nodes cache from file
+"""
+def load_cache():
+    current_nodes = []
+    try:
+        cn = open( 'current_nodes', 'r')
+        current_nodes = json.loads(cn.read())
+        cn.close()
+        print('Loaded '+str(current_nodes.__len__())+ ' nodes in current_nodes.')
+    except (OSError, IOError) as e:
+        print('File current_nodes was not found, will create new.')
+    return current_nodes
 
 
 """
@@ -204,11 +221,11 @@ def start_scanning_threads(current_nodes, blockchain_height):
     Random pick records from all valid nodes
 """
 def random_pick_nodes():
-    if currentNodes.__len__() > 5:
-        random_record = random.sample(currentNodes, 5)     # random pick 5 records
-        print('Random pick 5 IP for DNS records')
+    if currentNodes.__len__() > recordNum:
+        random_record = random.sample(currentNodes, recordNum)     # random pick records
+        print('Random pick %d IP for DNS records'%recordNum)
     else:
-        random_record = currentNodes    # if less than 5 then use all records
+        random_record = currentNodes.copy()    # if less than recordNum then use all records
         print('Use all IP for DNS records')
 
     return random_record
@@ -271,25 +288,18 @@ def update_dns_records(domain, records):
         print(str(err))
 
 
-
 def check_all_nodes():
 
     global currentNodes
 
-    try:
-        cn = open( 'current_nodes', 'r')        # read last nodes list from file
-        currentNodes = json.loads(cn.read())
-        cn.close()
-        print('Loaded '+str(currentNodes.__len__())+ ' nodes in current_nodes.')
-    except (OSError, IOError) as e:
-        print('File current_nodes was not found, will create new.')
+    currentNodes = load_cache()
 
     if currentNodes.__len__() > 0:              # scan current existing nodes
         print ('Checking existing nodes...')
         start_scanning_threads(currentNodes, get_blockchain_height())
     
     print('\nGetting new peers...')     # look for new nodes from daemon
-    start_scanning_threads(load_nodes(), get_blockchain_height())
+    start_scanning_threads(load_peers(), get_blockchain_height())
     
     print ('Building DNS records...')           # Build DNS records
     if currentNodes.__len__() > 0:
@@ -302,11 +312,45 @@ def check_all_nodes():
     print ("\nWe currently have {} opennodes in reserve".format(currentNodes.__len__()))
     update_time_stamp = str(datetime.now().isoformat(timespec='minutes'))
     print('%s Update finished'% update_time_stamp)
-    print('Wait for next update in %d minutes ...'% scanInterval)
+    print('Wait for next update in %d minutes ...'% shuffleInterval)
 
+
+"""
+Quick shuffle of DNS records
+"""
+def shuffle_nodes():
+    print ('Shuffling DNS records...')
+    
+    global currentNodes
+    
+    currentNodes = load_cache()
+
+    if currentNodes.__len__() > 0:
+        print ('Checking existing nodes...')
+        start_scanning_threads(currentNodes, get_blockchain_height())
+        if currentNodes.__len__() > recordNum:
+            print ('Building DNS records...')
+            update_dns_records(domainName, random_pick_nodes())
+            print ("\nWe currently have {} opennodes in reserve".format(currentNodes.__len__()))
+            update_time_stamp = str(datetime.now().isoformat(timespec='minutes'))
+            print('%s Shuffle finished'% update_time_stamp)
+            print('Wait for next update in %d minutes ...'% shuffleInterval)
+        else:
+            print('No availible node, skip DNS updating')
+            return -1
+    else:
+        print('No availible node, skip DNS updating')
+        return -1
+    
 
 if __name__ == '__main__':
     freeze_support()
     while True:
         check_all_nodes()
-        time.sleep(scanInterval * 60)
+        i = 0
+        while i < 20:
+            time.sleep(shuffleInterval * 60)
+            if shuffle_nodes() == -1:
+                break
+            i += 1
+            
