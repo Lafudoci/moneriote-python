@@ -238,7 +238,7 @@ def update_dns_records(domain, records):
     print('Start building records of ' + str(domain))
 
     try:
-        res_cf = requests.get(url = dnsApiUrl, params = {'name': domain, 'per_page': 100}, headers = headers_cf)
+        res_cf = requests.get(url = dnsApiUrl, params = {'name': domain, 'per_page': 100}, headers = headers_cf, timeout = 30)
         json_cf = json.loads(res_cf.text)
         #print(json_cf)
         if json_cf['success'] == True:
@@ -254,7 +254,7 @@ def update_dns_records(domain, records):
                     print(node_obj + ' already exist')
                 else:
                     try:
-                        res_create = requests.post(url = dnsApiUrl, json = {'name': domain, 'type': 'A', 'content': node_obj}, headers = headers_cf)
+                        res_create = requests.post(url = dnsApiUrl, json = {'name': domain, 'type': 'A', 'content': node_obj}, headers = headers_cf, timeout = 30)
                         json_create = json.loads(res_create.text)
                         if json_create['success'] == True:
                             print(node_obj + ' create record success')
@@ -273,7 +273,7 @@ def update_dns_records(domain, records):
                             break
                     if not flag_exist:
                         try:
-                            res_del = requests.delete(url = dnsApiUrl+list_obj['id'], headers = headers_cf)
+                            res_del = requests.delete(url = dnsApiUrl+list_obj['id'], headers = headers_cf, timeout = 30)
                             json_del = json.loads(res_del.text)
                             if json_del['success'] == True:
                                 print(list_obj['content'] + ' delete record success')
