@@ -5,6 +5,8 @@ from datetime import datetime
 
 import json, re, requests, subprocess, random, configparser, time
 
+import ban
+
 config = configparser.ConfigParser()
 config.read('config.ini')
 
@@ -36,6 +38,7 @@ recordNum = 5                 # Max number of DNS record to keep
 rpcPort = 18089               # This is the rpc server port that we'll check for
 currentNodes = []             # store current usable opennodes
 dns_record = {}               # store current DNS record
+ban_list = []                 # Store IP filter
 
 
 '''
@@ -193,6 +196,8 @@ def start_scanning_threads(current_nodes, blockchain_height):
 
     global currentNodes
 
+    current_nodes = node_filter(current_nodes)
+
     print('Scanning port '+ str(rpcPort) +' online & synced (height '+str(blockchain_height)+') nodes...')
 
     pool = Pool(processes=maximumConcurrentScans)
@@ -341,7 +346,24 @@ def shuffle_nodes():
     else:
         print('No availible node, skip DNS updating')
         return -1
-    
+
+
+"""
+Build node filter from ban-list
+"""
+def node_filter(node_list_input):
+    global ban_filter
+    ban_list = ban.get_ban_list()
+    print('Got %d nodes from ban-list'%len(ban_list))
+    if len(ban_list) > 0:
+        ban_filter = ban.build_filter(ban_list)
+    for ip in node_list_input:
+        mask16 = '.'.join(ip.split('.')[:2])
+        mask24 = '.'.join(ip.split('.')[:3])
+        if mask16 in ban_filter or mask24 in ban_filter or ip in ban_filter:
+            node_list_input.remove(ip)
+            print('Ban %s'%ip)
+    return node_list_input
 
 if __name__ == '__main__':
     freeze_support()
