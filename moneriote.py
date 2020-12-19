@@ -238,7 +238,7 @@ def update_dns_records(domain, records):
     print('Start building records of ' + str(domain))
 
     try:
-        res_cf = requests.get(url = dnsApiUrl, params = {'name': domain, 'per_page': 100}, headers = headers_cf, timeout = 30)
+        res_cf = requests.get(url = dnsApiUrl, params = {'name': domain, 'per_page': 500}, headers = headers_cf, timeout = 30)
         json_cf = json.loads(res_cf.text)
         #print(json_cf)
         if json_cf['success'] == True:
