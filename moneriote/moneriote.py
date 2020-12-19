@@ -154,7 +154,7 @@ class Moneriote:
             if isinstance(output, str) and output.startswith('Error') or not output:
                 log_err("monerod output: %s" % output)
             elif isinstance(output, str):
-                data['md_height'] = int(re.sub('[^0-9]', '', output.splitlines()[0]))
+                data['md_height'] = int(re.sub('[^0-9]', '', output.splitlines()[1]))
                 log_msg('monerod height is %d' % data['md_height'])
                 if method == 'monerod':
                     return data['md_height']
