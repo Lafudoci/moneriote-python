@@ -60,7 +60,7 @@ def get_blockchain_height():
         print(output)
         daemon_height = 0
     else:
-        daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[0]))
+        daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[1]))
         print('Daemon height is '+ str(daemon_height))
 
     # Gets height from xmrchain
