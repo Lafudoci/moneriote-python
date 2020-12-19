@@ -94,4 +94,15 @@ def parse_ini(fn):
 
     md = {k: try_cast(v) for k, v in config._sections.get('MoneroDaemon', {}).items()}
     dns = {k: try_cast(v) for k, v in config._sections.get('DNS', {}).items()}
-    return md, dns
+    ban = {k: try_cast(v) for k, v in config._sections.get('BanList', {}).items()}
+    return md, dns, ban
+
+
+def parse_ban_list(path):
+    if not os.path.isfile(path):
+        log_err("%s missing" % path, fatal=True)
+    ban_list = []
+    with open(os.path.join(path), 'r') as f:
+        for line in f:
+            ban_list.append(line.strip())
+    return ban_list

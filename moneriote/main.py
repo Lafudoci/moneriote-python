@@ -23,10 +23,11 @@ click_option = functools.partial(click.option, show_default=True)
 @click_option('--loop-interval', default=180, help='Loop interval for quickcheck nodes in cache and DNS records update.')
 @click_option('--scan-interval', default=1800, help='Interval at which to mass-scan RPC nodes.')
 @click_option('--concurrent_scans', default=20, help='The amount of servers to scan at once.')
+@click_option('--ban-list', help='Enable ban-list if list path is provided.')
 @click_option('--from-config', help='Load configuration from ini file.')
 def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_discovery,
         dns_provider, domain, subdomain, api_key, api_email, max_records, loop_interval,
-        concurrent_scans, scan_interval, from_config):
+        concurrent_scans, scan_interval, ban_list, from_config):
     from moneriote import CONFIG
     from moneriote.moneriote import Moneriote
     from moneriote.utils import log_err, log_msg, banner, parse_ini
@@ -34,7 +35,7 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
     banner()
 
     if from_config:
-        md, dns = parse_ini(from_config)
+        md, dns, ban = parse_ini(from_config)
         monerod_path = md['path']
         monerod_address = md['address']
         monerod_auth = md['auth']
@@ -45,6 +46,7 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
         subdomain = dns['subdomain_name']
         max_records = int(dns['max_records'])
         dns_provider = dns['provider']
+        ban_list = ban['ban_list_path']
 
     if not api_email:
         log_err('Parameter api_email is required', fatal=True)
@@ -82,7 +84,8 @@ def cli(monerod_path, monerod_address, monerod_port, monerod_auth, blockheight_d
                     md_address=monerod_address,
                     md_port=monerod_port,
                     md_auth=monerod_auth,
-                    md_height_discovery_method=blockheight_discovery)
+                    md_height_discovery_method=blockheight_discovery,
+                    ban_list_path=ban_list)
 
     while True:
         mon.main()

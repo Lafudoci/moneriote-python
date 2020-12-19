@@ -11,7 +11,7 @@ from datetime import datetime
 from moneriote import PATH_CACHE, CONFIG
 from moneriote.dns import DnsProvider
 from moneriote.rpc import RpcNode, RpcNodeList
-from moneriote.utils import log_msg, log_err, make_json_request, banner
+from moneriote.utils import log_msg, log_err, make_json_request, banner, parse_ban_list
 
 
 if sys.version_info[0] != 3 or sys.version_info[1] < 3.5:
@@ -26,7 +26,7 @@ except ImportError:
 class Moneriote:
     def __init__(self, dns_provider: DnsProvider, md_address: str = '127.0.0.1', md_port: int = 18081,
                  md_auth: str = 'not:used', md_path: str = 'monerod.exe',
-                 md_height_discovery_method: str = 'xmrchain'):
+                 md_height_discovery_method: str = 'xmrchain', ban_list_path: str = ''):
         self.dns_provider = dns_provider
 
         self.md_path = md_path
@@ -48,6 +48,13 @@ class Moneriote:
             f = open(PATH_CACHE, 'a')
             f.write('[]')
             f.close()
+        
+        if ban_list_path != '':
+            ban_list = parse_ban_list(ban_list_path)
+            log_msg('Load %d nodes from %s'%(len(ban_list), ban_list_path))
+            self.ban_list = ban_list
+        else:
+            self.ban_list = []
 
         self.monerod_check()
 
@@ -109,6 +116,15 @@ class Moneriote:
         """
         if len(nodes) == 0:
             return nodes
+
+        if len(self.ban_list) > 0:
+            filtered_nodes = RpcNodeList()
+            for node in nodes:
+                if node.address in self.ban_list:
+                    log_msg('Ban %s'%node.address)
+                else:
+                    filtered_nodes.append(node)
+            nodes = filtered_nodes
 
         now = datetime.now()
         log_msg('Scanning %d node(s) on port %d. This can take several minutes. Let it run.' % (
