@@ -67,6 +67,7 @@ Options:
   --loop-interval INTEGER       Update loop interval.  [default: 600]
   --scan-interval INTEGER       Interval at which to mass-scan RPC nodes.  [default: 3600]
   --concurrent_scans INTEGER    The amount of servers to scan at once.  [default: 20]
+  --ban-list TEXT               Enable ban-list if list path is provided. One IP address per line.
   --from-config TEXT            Load configuration from ini file.
   --help                        Show this message and exit.
 ```
@@ -86,6 +87,7 @@ moneriote --monerod-path "/home/xmr/monero-gui-v0.12.3.0/monerod"
           --api-key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
           --api-email "example@bla.com" 
           --max-records 5
+          --ban-list "/home/xmr/block.txt"
 ```
 
 Flags
@@ -169,6 +171,10 @@ Ask monerod for new peers and mass-scan them, every `X` seconds. Default is 1 ho
 Default: `20`
 
 The amount of servers to scan at once.
+
+#### `--ban-list`
+
+Enable ban-list if list file path is provided. One IP address per line.
 
 #### `--from-config`
 
