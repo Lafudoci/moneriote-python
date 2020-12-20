@@ -22,6 +22,8 @@ dnsApiKey = config.get('cloudflareAPI', 'dnsApiKey')
 dnsApiEmail = config.get('cloudflareAPI', 'dnsApiEmail')
 dnsApiUrl = 'https://api.cloudflare.com/client/v4/zones/'+dnsApiZone+'/dns_records/'
 
+banListUrl = config.get('banList', 'banListUrl')
+
 headers_cf = {
     'Content-Type': 'application/json',
     'X-Auth-Email': dnsApiEmail,
@@ -193,6 +195,9 @@ def start_scanning_threads(current_nodes, blockchain_height):
 
     global currentNodes
 
+    # Filter nodes by ban-list refs
+    current_nodes = nodes_filter(current_nodes)
+
     print('Scanning port '+ str(rpcPort) +' online & synced (height '+str(blockchain_height)+') nodes...')
 
     pool = Pool(processes=maximumConcurrentScans)
@@ -341,7 +346,38 @@ def shuffle_nodes():
     else:
         print('No availible node, skip DNS updating')
         return -1
-    
+
+
+"""
+Get ban-list from external refs
+"""
+def nodes_filter(node_list_input):
+    node_list_output = []
+    ban_list = []
+    print('Getting ban-list from: %s'%banListUrl)
+    try:
+        resp = requests.get(url=banListUrl, timeout=30)
+        if (resp.status_code != 200):
+            return node_list_output
+    except requests.exceptions.RequestException as err:
+        print(err)
+        return node_list_output
+
+    try:
+        for line in resp.text.splitlines():
+            ban_list.append(line.strip())
+
+    except Exception as err:
+        print('Web content decode error: '+str(err))
+        return node_list_output
+
+    for ip in node_list_input:
+        if ip in ban_list:
+            print('Ban %s'%ip)
+        else:
+            node_list_output.append(ip)
+
+    return node_list_output
 
 if __name__ == '__main__':
     freeze_support()
