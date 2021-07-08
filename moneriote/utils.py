@@ -5,6 +5,7 @@ import random
 from datetime import datetime
 
 import requests
+from requests.auth import HTTPDigestAuth
 
 
 def banner():
@@ -47,7 +48,7 @@ def random_user_agent():
     ])
 
 
-def make_json_request(url, headers=None, method='GET', verbose=True, **kwargs):
+def make_json_request(url, headers=None, method='GET', auth=None, verbose=True, **kwargs):
     if verbose:
         log_msg("%s: %s" % (method, url))
 
@@ -59,6 +60,10 @@ def make_json_request(url, headers=None, method='GET', verbose=True, **kwargs):
 
     if headers:
         kwargs['headers'] = headers
+
+    if auth:
+        user, pw = auth.split(':')
+        kwargs['auth'] = HTTPDigestAuth(user, pw)
 
     try:
         _method = getattr(requests, method.lower())
