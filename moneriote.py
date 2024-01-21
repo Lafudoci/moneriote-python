@@ -6,16 +6,14 @@ from datetime import datetime
 import json, re, requests, subprocess, random, configparser, time
 
 import ban
+import sys
 
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-monerodLocation = config.get('MoneroRPC', 'monerodLocation')    # This is the relative or full path to the monerod binary
 moneroDaemonAddr = config.get('MoneroRPC', 'moneroDaemonAddr')  # The IP address that the rpc server is listening on
 moneroDaemonPort = config.get('MoneroRPC', 'moneroDaemonPort')  # The port address that the rpc server is listening on
 moneroDaemonAuth = config.get('MoneroRPC', 'moneroDaemonAuth')  # The username:password that the rpc server requires (if set) - has to be something
-
-useXMRchianAsRef = config.get('MoneroRPC', 'useXMRchianAsRef')  # If sets true, the script will use xmrchain block height when daemon height is lagging
 
 domainName = config.get('cloudflareAPI', 'domainName')
 allDomainName = config.get('cloudflareAPI', 'allDomainName')
@@ -45,107 +43,63 @@ ban_list = []                 # Store IP filter
     Gets the current top block on the chain
 '''
 def get_blockchain_height():
-
     daemon_height = 0
-    ref_height = 0
-
-    # Gets height from daemon
-    process = Popen([
-        monerodLocation,
-        '--rpc-bind-ip', moneroDaemonAddr,
-        '--rpc-bind-port', moneroDaemonPort,
-        '--rpc-login', moneroDaemonAuth,
-        'print_height'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        universal_newlines=True, bufsize=1)
-    (output, err) = process.communicate()
-    if output.startswith('Error'):
-        print(output)
-        daemon_height = 0
-    else:
-        daemon_height = int(re.sub('[^0-9]', '', output.splitlines()[1]))
-        print('Daemon height is '+ str(daemon_height))
-
-    # Gets height from xmrchain
-    if useXMRchianAsRef == 'True':
-        i = 1
-        while True:
-            try:
-                resp = requests.get(url = 'https://xmrchain.net/api/networkinfo', timeout = 20)
-            except requests.exceptions.RequestException as err:
-                print(' ERROR: '+ str(err))
-                print(' Retry in 10s ...')
-                time.sleep(10)
-                continue
-            
-            if str(resp) == '<Response [200]>':
-                try:
-                    jsontext = json.loads(resp.text)
-                except ValueError:
-                    print ('Decoding xmrchain JSON has failed')
-                    continue
-            
-                if jsontext['status'] == 'success':
-                    ref_height = int(jsontext['data']['height'])
-                    break
+    retry = 0
+    while True:
+        try:
+            # Gets height from daemon
+            url = "http://%s:%s/get_height"%(moneroDaemonAddr, moneroDaemonPort)
+            headers = {"Content-Type": "application/json"}
+            response = requests.get(url, headers=headers, timeout=20)
+            if response.status_code == 200:
+                data = response.json()
+                status = data.get('status')
+                if status == 'OK':
+                    daemon_height = int(data.get('height'))
+                    print('Daemon height is '+ str(daemon_height))
+                    return daemon_height
                 else:
-                    print(' ERROR:'+ jsontext['status'])
+                    print(' ERROR: Daemon not respond OK')
                     print(' Retry in 10s ...')
+                    retry += 1
                     time.sleep(10)
-                    continue
             else:
-                print(str(resp))
+                print(' ERROR: HTTP code %d'%response.status_code)
                 print(' Retry in 10s ...')
                 time.sleep(10)
-                if i > 5:
-                    print('Xmrchain is not available now, skipping.')
-                    ref_height = -1
-                    break
-                i += 1
-                continue
+                retry += 1
+        except requests.exceptions.RequestException as err:
+            print(' ERROR: '+ str(err))
+            print(' Retry in 10s ...')
+            time.sleep(10)
+            retry += 1
+        if retry > 10:
+            print(' ERROR: Could not get height from Daemon, max retry, exiting')
+            sys.exit()
 
-        print('xmrchain height is '+ str(ref_height))
 
-        # Compare block height
-        if (ref_height > daemon_height):
-            print('Xmrchain height is higher. Daemon might be lagging.')
-            return ref_height
-        elif (ref_height == -1):
-            print('Xmrchain is not available now. Use daemon height')
-            return daemon_height
-        else:
-            return daemon_height
-
-    else: return daemon_height
-    
 
 '''
     Gets the last known peers from the server
 '''
 def load_peers():
-
     nodes = []
-    process = Popen([
-        monerodLocation,
-        '--rpc-bind-ip', moneroDaemonAddr,
-        '--rpc-bind-port', moneroDaemonPort,
-        '--rpc-login', moneroDaemonAuth,
-        'print_pl'],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        universal_newlines=True, bufsize=1)
-    (output, err) = process.communicate()
-
-    regex = r"(gray|white)\s+(\w+)\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})"
-    matches = re.finditer(regex, output)
-
-
-    for matchNum, match in enumerate(matches):
-        if match.group(1) == 'white':
-            address = match.group(3)
-
-            if address not in currentNodes and address != '0.0.0.0':
-                nodes.append(address)
-    print('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
+    url = "http://%s:%s/get_peer_list"%(moneroDaemonAddr, moneroDaemonPort)
+    headers = {"Content-Type": "application/json"}
+    response = requests.get(url, headers=headers, timeout=20)
+    if response.status_code == 200:
+        data = response.json()
+        status = data.get('status')
+        if status == 'OK':
+            for peer in data["white_list"]:
+                address = f"{peer['ip'] // 2**24}.{peer['ip'] // 2**16 % 256}.{peer['ip'] // 2**8 % 256}.{peer['ip'] % 256}"
+                if address not in currentNodes and address != '0.0.0.0':
+                    nodes.append(address)
+            print('Got peers from RPC: ' + str(len(nodes)) + ' nodes')
+        else:
+            print(f"Status Error: {status}")
+    else:
+        print(f"HTTP Error: {response.status_code}")
     return nodes
 
 
@@ -213,6 +167,9 @@ def start_scanning_threads(current_nodes, blockchain_height):
         if node['valid'] is False and node['address'] in currentNodes:
             currentNodes.remove(node['address'])
     
+    print('Banning cluster nodes.')
+    currentNodes = ban.ban_node_cluster(currentNodes)
+
     print( 'After screening: ' + str(len(currentNodes)) + ' nodes')
 
     try:

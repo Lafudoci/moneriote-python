@@ -1,27 +1,19 @@
 import json
 import requests
+import dns.resolver
 
-ban_list_url = 'https://gui.xmr.pm/files/block.txt'
+blocklist_domain = 'blocklist.moneropulse.se'
 
 
 def get_ban_list():
     ban_list = []
     try:
-        resp = requests.get(url=ban_list_url, timeout=30)
-        if (resp.status_code != 200):
-            return ban_list
-    except requests.exceptions.RequestException as err:
-        print(err)
-        return ban_list
-
-    try:
-        for line in resp.text.splitlines():
-            ban_list.append(line.strip())
-
-    except Exception as err:
-        print('Web content decode error: '+str(err))
-        return ban_list
-
+        result = dns.resolver.resolve(blocklist_domain, 'TXT')
+        for txt_record in result:
+            ban_list = ban_list + str(txt_record).replace('"', '').split(';')
+    except dns.exception.DNSException as e:
+        print(f"Error querying TXT record for {blocklist_domain}: {e}")
+    # print(ban_list)
     return ban_list
 
 
@@ -62,6 +54,27 @@ def build_filter(ban_list):
 
     return ip_filter
 
+
+def ban_node_cluster(node_list_input):
+    node_list_output = []
+    mask16_counts = {}
+    # count cluster
+    for ip in node_list_input:
+        mask16 = '.'.join(ip.split('.')[:2])
+        if mask16 in mask16_counts:
+            mask16_counts[mask16] += 1
+        else:
+            mask16_counts[mask16] = 0
+    # pop cluster
+    for ip in node_list_input:
+        mask16 = '.'.join(ip.split('.')[:2])
+        if mask16_counts[mask16] > 2:
+            print('Ban %s'%ip)
+            continue
+        else:
+            node_list_output.append(ip)
+
+    return node_list_output
 
 if __name__ == "__main__":
     ban_list = get_ban_list()
