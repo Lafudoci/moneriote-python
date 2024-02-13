@@ -22,8 +22,6 @@ dnsApiKey = config.get('cloudflareAPI', 'dnsApiKey')
 dnsApiEmail = config.get('cloudflareAPI', 'dnsApiEmail')
 dnsApiUrl = 'https://api.cloudflare.com/client/v4/zones/'+dnsApiZone+'/dns_records/'
 
-banListUrl = config.get('banList', 'banListUrl')
-
 headers_cf = {
     'Content-Type': 'application/json',
     'X-Auth-Email': dnsApiEmail,
