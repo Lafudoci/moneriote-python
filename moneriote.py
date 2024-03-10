@@ -271,14 +271,14 @@ def check_all_nodes():
 
     currentNodes = load_cache()
 
-    if currentNodes.__len__() > 0:              # scan current existing nodes
-        if currentNodes.__len__() < 5:
-            currentNodes += load_seed()
-        print ('Checking existing nodes...')
+    if currentNodes.__len__() < 5:
+        currentNodes += load_seed()
+        print ('Node counts was less than 5, reloading seed nodes...')
         start_scanning_threads(currentNodes, get_blockchain_height())
     
-    print('\nGetting new peers...')     # look for new nodes from daemon
-    start_scanning_threads(load_peers(), get_blockchain_height())
+    if currentNodes.__len__() < 5:
+        print('\nStill less than 5, trying to get new peers from daemon...')     # look for new nodes from daemon
+        start_scanning_threads(load_peers(), get_blockchain_height())
     
     print ('Building DNS records...')           # Build DNS records
     if currentNodes.__len__() > 0:
@@ -286,7 +286,8 @@ def check_all_nodes():
         if allDomainName != '':
             update_dns_records(allDomainName, currentNodes)
     else:
-        print('No availible node, skip DNS updating')
+        print('No availible node, exiting')
+        sys.exit()
     
     print ("\nWe currently have {} opennodes in reserve".format(currentNodes.__len__()))
     update_time_stamp = str(datetime.now().isoformat(timespec='minutes'))
