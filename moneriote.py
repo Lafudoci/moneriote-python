@@ -119,6 +119,21 @@ def load_cache():
 
 
 """
+    Load seed nodes from file
+"""
+def load_seed():
+    seed_nodes = []
+    try:
+        sn = open( 'seed_nodes', 'r')
+        seed_nodes = json.loads(sn.read())
+        sn.close()
+        print('Loaded '+str(seed_nodes.__len__())+ ' nodes in seed_nodes.')
+    except (OSError, IOError) as e:
+        print('File seed_nodes was not found, will skip.')
+    return seed_nodes
+
+
+"""
     Scans the requested address to see if the RPC port is available and is within the accepted range
 """
 def scan_node(accepted_height, address):
@@ -257,6 +272,8 @@ def check_all_nodes():
     currentNodes = load_cache()
 
     if currentNodes.__len__() > 0:              # scan current existing nodes
+        if currentNodes.__len__() < 5:
+            currentNodes += load_seed()
         print ('Checking existing nodes...')
         start_scanning_threads(currentNodes, get_blockchain_height())
     

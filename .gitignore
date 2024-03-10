@@ -3,3 +3,4 @@ current_nodes*
 /.vscode
 /venv
 /__pycache__
+seed_nodes
